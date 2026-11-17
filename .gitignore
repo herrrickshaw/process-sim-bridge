@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.DS_Store
+# generated outputs
+audit.csv
+review.csv
+ocr_rows.csv
+case.json
+*.hsc
+*.bkp
+.env
