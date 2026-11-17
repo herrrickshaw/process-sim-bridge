@@ -60,6 +60,34 @@ class ProcessModel(unittest.TestCase):
         for st in em.conceptualModel.processConnections:
             self.assertIs(st.source.connectorReference, st); self.assertIs(st.target.connectorReference, st)
 
+    def test_step_classes_are_typed_so_readers_can_categorise(self):
+        from hysys_bridge.tests.test_dexpi import piping
+        fs = piping(); fs.units["X-1"].type = "compressor"
+        names = {st.identifier: type(st).__name__ for st in dexpi_process.build(fs).conceptualModel.processSteps}
+        self.assertEqual({k: names[k] for k in ("P-1", "FV-1", "SP-1", "V-1", "R-1", "X-1")},
+                         {"P-1": "Pumping", "FV-1": "RegulatingFlow", "SP-1": "SplittingMaterial", "V-1": "SeparatingByPhaseSeparation",
+                          "R-1": "ReactingChemicals", "X-1": "Compressing"})
+
+    def test_boundaries_are_source_and_sink_steps(self):
+        names = {st.identifier: type(st).__name__ for st in dexpi_process.build(sample()).conceptualModel.processSteps}
+        self.assertEqual(names["BOUNDARY-1"], "Source"); self.assertEqual(names["BOUNDARY-4"], "Sink")
+
+    def test_composition_is_one_vector_and_overall_state_is_set(self):
+        st = next(s for s in dexpi_process.build(sample()).conceptualModel.processConnections if s.identifier == "3")
+        ms = st.materialStateReference
+        self.assertIs(ms.state, ms.phases[0])                              # readers take the overall state from .state
+        qv = ms.state.composition.moleFractions
+        self.assertEqual(len(qv), 1); self.assertEqual(len(qv[0].value.values), 2)
+        self.assertAlmostEqual(sum(qv[0].value.values), 1.0)
+        self.assertEqual(qv[0].value.unit.value, "Fraction")
+
+    def test_classes_with_a_mandatory_method_still_build(self):
+        fs = Flowsheet(name="m"); fs.units = {"K-1": Unit("K-1", "compressor"), "C-1": Unit("C-1", "cooler"), "R-1": Unit("R-1", "reactor")}
+        fs.streams = {"1": Stream("1", dst="K-1"), "2": Stream("2", src="K-1", dst="C-1"), "3": Stream("3", src="C-1", dst="R-1"), "4": Stream("4", src="R-1")}
+        fs.relink()
+        names = {st.identifier: type(st).__name__ for st in dexpi_process.build(fs).conceptualModel.processSteps}
+        self.assertEqual((names["K-1"], names["C-1"], names["R-1"]), ("Compressing", "RemovingThermalEnergy", "ReactingChemicals"))
+
 
 if __name__ == "__main__":
     unittest.main()
