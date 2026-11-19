@@ -24,7 +24,7 @@ TOOLS = {
 }
 DWSIM_TYPE = {"mixer": "Mixer", "splitter": "Splitter", "pump": "Pump", "heater": "Heater", "cooler": "Cooler",
               "valve": "Valve", "compressor": "Compressor", "separator": "Vessel"}      # names are in dwsim_unitop_add's list
-UNIT_PARAMS_VERIFIED = {"pump", "heater", "cooler"}
+UNIT_PARAMS_VERIFIED = {"pump", "heater", "cooler", "valve", "compressor", "mixer", "separator"}   # splitter: only via StreamMassFlowSpec, not mapped from the IR
 PACKAGE = {"Peng-Robinson": "Peng-Robinson (PR)", "SRK": "Soave-Redlich-Kwong (SRK)", "Steam Tables": "Steam Tables (IAPWS-IF97)"}
 KEYMAP = {"T": ("temperature_K", lambda v: v + 273.15, lambda v: v - 273.15),
           "P": ("pressure_Pa", lambda v: v * 1e3, lambda v: v / 1e3),
@@ -126,7 +126,8 @@ class DwsimBackend:
         elif t in ("heater", "cooler"):
             if "temperature_K" in o: p.update(CalcMode="OutletTemperature", OutletTemperature=o["temperature_K"])
             if dp is not None: p["DeltaP"] = dp                                    # pressure DROP
-        elif t == "valve" and dp is not None: p["DeltaP"] = dp                      # unverified property name
+        elif t == "valve" and dp is not None: p["DeltaP"] = dp                      # pressure DROP, verified 2026-11-20 (CH4 50->20 bar, isenthalpic)
+        elif t == "compressor" and "pressure_Pa" in o: p["POut"] = o["pressure_Pa"]  # absolute outlet pressure; efficiency left at the 75% default
         return p
 
     def flush(self):
