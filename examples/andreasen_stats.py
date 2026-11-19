@@ -6,7 +6,9 @@ ref = np.loadtxt(f"{clone}/data/DWSIM_result.csv", delimiter=","); hys = np.load
 out = np.array(json.load(open(f)), dtype=float)            # rows: solved, crude flow (kmol/h), power (kW), RVP (psi)
 n = len(out); ok = out[:, 0] == 1
 bad_ref = (ref[:n, :3] == -9999).any(axis=1)                # the paper's script writes -9999 for cases that did not solve in its DWSIM 7
-print(f"cases {n}: ours solved {int(ok.sum())}; paper's DWSIM 7 failed (-9999) on {int(bad_ref.sum())}: {[int(i) for i in np.where(bad_ref)[0]]}; ours unsolved: {[int(i) for i in np.where(~ok)[0]]}")
+stale = np.r_[False, (ref[1:n, :3] == ref[:n - 1, :3]).all(axis=1)] & ~bad_ref   # a row identical to the previous one = stale solver state in the paper's run
+bad_ref |= stale
+print(f"cases {n}: ours solved {int(ok.sum())}; paper's DWSIM 7 unusable (-9999 or a row identical to the previous one) on {int(bad_ref.sum())}: {[int(i) for i in np.where(bad_ref)[0]]}; ours unsolved: {[int(i) for i in np.where(~ok)[0]]}")
 okd = ok & ~bad_ref                                          # rows usable against the paper's DWSIM results
 print(f"rows compared with paper DWSIM 7: {int(okd.sum())}; with paper HYSYS: {int(ok.sum())}")
 names = ["crude flow", "power", "RVP"]

@@ -7,7 +7,8 @@ data/HYSYS_result.csv (paper's Aspen HYSYS results).
 The flowsheet is loaded in the DWSIM MCP container through a read-only mount; the paper's own objects and set-points are applied (it used DWSIM's
 automation API on Windows; we use dwsim_unitop_set / dwsim_stream_set_conditions / dwsim_solve_run). Object names differ: the paper's "01", "21", "63"
 are tags MSTR-01, MSTR-21, MSTR-63 here. The fourth output (vapour ratio) is not reproduced: the script text defining its denominator is cut off in the repo copy read.
-Needs numpy. Usage: python -u examples/andreasen_rerun.py <path-to-dwsim-paper-clone> [n_cases] [out.json]
+Needs numpy. Usage: python -u examples/andreasen_rerun.py <path-to-dwsim-paper-clone> [n_cases] [out.json] [case,case,...]
+With an explicit case list each case is solved after a FRESH load of the flowsheet (used to retry cases that failed in a long run).
 """
 import os, sys, json, time; sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
@@ -17,6 +18,7 @@ X=np.loadtxt(f"{SIM}/data/scaled_testplan.csv",delimiter=",")
 REF=np.loadtxt(f"{SIM}/data/DWSIM_result.csv",delimiter=","); HYS=np.loadtxt(f"{SIM}/data/HYSYS_result.csv",delimiter=",")
 N=int(sys.argv[2]) if len(sys.argv)>2 else 1
 OUT=sys.argv[3] if len(sys.argv)>3 else "andreasen_rerun.json"
+CASES=[int(v) for v in sys.argv[4].split(",")] if len(sys.argv)>4 else None
 t=StdioTransport(["podman","run","-i","--rm","--network","none","-v",f"{SIM}/simulations:/data:ro","ghcr.io/danwbr/dwsim-mcp:latest","--stdio"])
 def c(tool,**a):
     try: return t.call(tool,a)
@@ -43,7 +45,8 @@ def outputs():
         pw+=float(v["value"]) if v else float("nan")
     return crude,pw,rvp,det
 out=[]
-for i in range(N):
+for i in (CASES if CASES is not None else range(N)):
+    if CASES is not None: fid=c("dwsim_flowsheet_load",filepath="/data/optimisation.dwxmz")["flowsheet_id"]     # fresh load per retried case
     t0=time.time(); apply(X[i]); r=c("dwsim_solve_run",flowsheet_id=fid,timeout_s=300); ok=r.get("ok")
     if not ok: r=c("dwsim_solve_run",flowsheet_id=fid,timeout_s=300); ok=r.get("ok")
     crude,pw,rvp,det=outputs() if ok else (np.nan,np.nan,np.nan,{})
