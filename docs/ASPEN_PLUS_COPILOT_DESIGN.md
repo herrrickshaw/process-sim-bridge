@@ -147,3 +147,14 @@ the evaluation harness, not re-implementing those.
 `dwsim_build` (confirm=true; mock unless `live=true` and the operator sets `DWSIM_MCP_CMD`), `dwsim_solve` (blocked while DOF
 are open; compares results with specs), `dwsim_read_stream`, `dwsim_close`. Tests: 7 mock-backed, plus a live round trip through
 the tools against the real server (`DWSIM_MCP_LIVE=1`). Not yet: sensitivity sweep, plan-then-apply edit list, scenario tools.
+
+### 8.4 Aspen Plus backend + catalogue (2026-11-20, untested on Aspen)
+
+`hysys_bridge/aspen/`: `catalogue.py` (block models, ports, node paths, unit tables; each entry marked `doc` or `guess`; seeded from the two
+MIT servers' block docs, attribution in the file), `backend.py` (`AspenBackend` on the Backend protocol over a path `Tree`; `MockTree`
+for CI; `AspenComTree` for Windows, never run), 12 tests on the mock. Design choices: every write reads the node's `UnitString` and
+converts or refuses (no unit guessing; a mass spec onto a mole-flow node is an error); derived-stream specs go onto block inputs at
+solve; valve and compressor are refused unless `allow_unverified=True` (their inputs are not documented in the sources);
+only T and P results are readable (the only documented result paths). Not done: MCP tools for Aspen, the property-method name map beyond
+Peng-Robinson, recycles/tear streams, columns. First job on a licensed Windows host: run `AspenComTree` against a blank case and fix
+whatever the `guess` entries got wrong (pump model string, total-flow node `TOTAL` vs `TOTFLOW`, run-status nodes).
