@@ -246,6 +246,8 @@ TOOLS = {
     "export_dexpi": (t_export_dexpi, "Write the P&ID as DEXPI-style Proteus XML.", _s({"name": _n, "path": _p, "overwrite": _b}, ["name", "path"])),
     "export_dexpi_process": (t_export_dexpi_process, "Write the DEXPI Process model JSON (needs pydexpi).", _s({"name": _n, "path": _p, "overwrite": _b}, ["name", "path"])),
 }
+from .dwsim.tools import TOOLS as _DWSIM_TOOLS        # dwsim_* tools drive DWSIM from the same sessions
+TOOLS.update(_DWSIM_TOOLS)
 
 
 # ---- JSON-RPC / MCP stdio loop ----------------------------------------------------------------------------

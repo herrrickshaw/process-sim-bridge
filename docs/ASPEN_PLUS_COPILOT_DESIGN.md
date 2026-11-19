@@ -140,3 +140,10 @@ compressor, splitter, vessel property names; mixed multi-component and recycle f
 a licence key. Design consequence: the server already ships spec-completeness (`dwsim_flowsheet_degrees_of_freedom`,
 `dwsim_flowsheet_check`) and explanation tools, so our value-add is the IR/H&MB/P&ID front end, the plan-then-apply gate and
 the evaluation harness, not re-implementing those.
+
+### 8.3 MCP tools wired (2026-11-20)
+
+`hysys_bridge/dwsim/tools.py` registers six tools into `hysys_bridge.mcp_server`: `dwsim_status`, `dwsim_check_specs`,
+`dwsim_build` (confirm=true; mock unless `live=true` and the operator sets `DWSIM_MCP_CMD`), `dwsim_solve` (blocked while DOF
+are open; compares results with specs), `dwsim_read_stream`, `dwsim_close`. Tests: 7 mock-backed, plus a live round trip through
+the tools against the real server (`DWSIM_MCP_LIVE=1`). Not yet: sensitivity sweep, plan-then-apply edit list, scenario tools.
