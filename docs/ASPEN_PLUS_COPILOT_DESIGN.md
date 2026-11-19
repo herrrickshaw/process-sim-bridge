@@ -158,3 +158,21 @@ solve; valve and compressor are refused unless `allow_unverified=True` (their in
 only T and P results are readable (the only documented result paths). Not done: MCP tools for Aspen, the property-method name map beyond
 Peng-Robinson, recycles/tear streams, columns. First job on a licensed Windows host: run `AspenComTree` against a blank case and fix
 whatever the `guess` entries got wrong (pump model string, total-flow node `TOTAL` vs `TOTFLOW`, run-status nodes).
+
+### 8.5 First model from a public document (2026-11-20)
+
+Real industrial operating manuals are not openly published (the ones found online were Scribd uploads of proprietary manuals, which were
+not used). Used instead a US Government work: DOE/NETL "Cost and Performance Baseline for Fossil Energy Plants Vol. 1" Rev 4 (OSTI
+1569246), Exhibit 4-26, Case B11A subcritical steam cycle. `examples/doe_netl_b11a_steam_cycle.py` builds (a) the condensate pump + four
+feedwater heaters and (b) the main-steam boiler section through `DwsimBackend` on the real DWSIM server (Steam Tables package). Result:
+every stage's enthalpy is within about 1 Btu/lb of the report (e.g. FWH4 214.8 vs 215; boiler dH 1022.8 vs 1023). Caveats: inputs were read by
+hand from a figure's text layer; this checks DWSIM's steam tables and our backend's unit handling, not the plant; heater duties and
+extraction steam flows (which need a Mixer/Splitter, not yet verified) are not modelled.
+
+### 8.6 Independent cross-check of the steam-cycle model (2026-11-20)
+
+`examples/crosscheck_steam_cycle.py` recomputes every stage of the 8.5 model with CoolProp 8.0.0 (IAPWS-95) and a tespy 0.12.1 network.
+DWSIM vs CoolProp enthalpy: within 0.26 Btu/lb at all 8 points (hot well 69.0 vs 69.0; main steam 1494.4 vs 1494.3). Report vs CoolProp is within
+0.6 Btu/lb, i.e. the report's rounding. tespy: total feedwater-heater duty 140.52 MW vs 140.41 MW from the report's enthalpies; pump 686.5 kW at an
+assumed 80% efficiency (not from the report). Conclusion: DWSIM's steam tables, our backend's unit handling and the hand-read inputs agree; this says
+nothing about the plant itself. The hot well in the report (101 F at 1 psia) is slightly below saturation (101.7 F).

@@ -79,3 +79,38 @@ degrees-of-freedom pre-check before running, no evaluation harness, no mock back
 **Recommended build step:** an `AspenPlusCOM` backend implementing our Backend protocol using the calls above (STA thread, SuppressDialogs,
 RootModel/FindNode), a catalogue generated from their `docs/blocks`, and a `MockAspen` that replays recorded node values. Still needs a
 licensed Windows host to test: none of this can run on this Mac.
+
+## Thermodynamics packages and GitHub tools (2026-11-20)
+
+Metadata from the GitHub API (licence = SPDX id it reported; "NOASSERTION" means the licence is not machine-readable, read it before use).
+Not installed or run here.
+
+| Tool | What it adds to this build | Licence | Stars | Pushed |
+|---|---|---|---|---|
+| [CoolProp/CoolProp](https://github.com/CoolProp/CoolProp) | Reference-grade pure fluid and mixture properties; an independent check on DWSIM's steam/EoS numbers (DWSIM already bundles it) | MIT | 1125 | 2026-11-19 |
+| [CalebBell/thermo](https://github.com/CalebBell/thermo) + [chemicals](https://github.com/CalebBell/chemicals) | Python thermodynamics, phase equilibrium, property databases and correlations; cross-check VLE (e.g. ethanol-water NRTL) in plain Python | MIT | 801 / 315 | 2026-07 / 2026-08 |
+| [CalebBell/fluids](https://github.com/CalebBell/fluids), [ht](https://github.com/CalebBell/ht) | Pipe/valve/pump sizing and heat-exchanger correlations; fills the sizing gap beside `valve_sizing` | MIT | 468 / 261 | 2026-11 / 2025-12 |
+| [equinor/neqsim](https://github.com/equinor/neqsim) | Oil and gas fluid behaviour and process simulation library; a second open simulator to cross-check against DWSIM | Apache-2.0 | 171 | 2026-11-19 |
+| [feos-org/feos](https://github.com/feos-org/feos) | PC-SAFT and other SAFT equations of state, Rust with Python bindings | Apache-2.0 | 205 | 2026-11-18 |
+| [thermotools/thermopack](https://github.com/thermotools/thermopack) | SAFT-VR Mie, PC-SAFT, cubic EoS; Fortran with Python wrapper | NOASSERTION (sources disagree) | 108 | 2026-02-26 |
+| [ClapeyronThermo/Clapeyron.jl](https://github.com/ClapeyronThermo/Clapeyron.jl) | Large Julia toolkit of fluid-thermodynamic models | MIT | 302 | 2026-11-18 |
+| [Cantera/cantera](https://github.com/Cantera/cantera) | Kinetics, thermodynamics and transport; reactor and combustion work | NOASSERTION | 886 | 2026-11-01 |
+| [reaktoro/reaktoro](https://github.com/reaktoro/reaktoro) | Reactive/aqueous equilibrium (DWSIM can use it as an external package) | LGPL-2.1 | 224 | 2026-02-02 |
+| [IDAES/idaes-pse](https://github.com/IDAES/idaes-pse) + [Pyomo](https://github.com/Pyomo/pyomo) | Equation-oriented flowsheets with property packages; the route to optimisation and to NETL-style models | NOASSERTION | 358 / 2564 | 2026-11 |
+| [oemof/tespy](https://github.com/oemof/tespy) | Thermal engineering networks (steam cycles, heat pumps) in Python; a direct comparison for the NETL steam-cycle model | MIT | 440 | 2026-11-19 |
+| [pycalphad/pycalphad](https://github.com/pycalphad/pycalphad) | CALPHAD phase diagrams (materials, not process) | NOASSERTION | 432 | 2026-11-17 |
+
+LLM-for-simulator repos found: [singhvishal59515-design/dwsim-agentic-ai](https://github.com/singhvishal59515-design/dwsim-agentic-ai) (no licence, 0 stars: read for ideas, do not copy) and
+[Hc1012/SafePlant-Agent](https://github.com/Hc1012/SafePlant-Agent) (no licence, fault diagnosis). Not found: BioSTEAM / thermosteam under `BioSTEAMLab`
+(404 under that name; the project lives elsewhere), a PC-SAFT repo under `ipqa-research/pcsaft` (404). The `thermo` and `CoolProp` pair is the
+cheapest way to make exercises better: they give a free, independent property check for every stream a DWSIM or Aspen run returns.
+
+### Distillation attempt (NREL D-502), outcome
+Not completed. Findings about the DWSIM MCP server (1.0.0): `DistillationColumn` and `ShortcutColumn` accept `unitop_set` for stages, reflux
+(`Condenser_Specification_Value`), reboiler spec (`Reboiler_Specification_Value`), `Global_Stage_Efficiency`, `CondenserType`, and connect with
+feed ports 0-9, products (0 distillate, 1 bottoms, 9 overhead vapour) and energy streams. But the feed port-to-stage mapping is not settable
+(the tutorial's `feed_stage`/`number_of_stages` arguments to `unitop_add` are silently ignored), so the rigorous column fails with
+"stream connections missing"; the shortcut column's key-component settings (`m_lightkey`...) are shown in the DOF report but are not
+settable, so it fails with NaN. Needs either a newer server, or a request to DWSIM to expose stage assignment and key components.
+Report-derived targets are in `docs/` notes: 45 stages at 76% efficiency, molar reflux 3.5, overhead 92.5 wt% ethanol, bottoms 0.05 wt%,
+condenser 23 Gcal/h, ethanol product about 21.7 t/h (derived from 61.0 MMgal/yr over 8,410 h).
