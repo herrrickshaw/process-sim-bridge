@@ -252,6 +252,8 @@ from .aspen.tools import TOOLS as _ASPEN_TOOLS        # aspen_* tools (mock tree
 TOOLS.update(_ASPEN_TOOLS)
 from .safety_link import TOOLS as _SAFETY_TOOLS      # safety_* tools: solved streams -> process-safety-design-toolkit
 TOOLS.update(_SAFETY_TOOLS)
+from .refinery_link import TOOLS as _REFINERY_TOOLS   # refinery_* tools: whole-refinery screening balance
+TOOLS.update(_REFINERY_TOOLS)
 
 
 # ---- JSON-RPC / MCP stdio loop ----------------------------------------------------------------------------
