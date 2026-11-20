@@ -139,3 +139,17 @@ Principles: a rule is only real if a planted fault breaks it; a check needs a po
 | Independent oracle | A second source for the same case (another paper, vendor data, or the commercial tool) | Phase 3 | Not built |
 
 Scenario policy: a scenario varies a value inside its stated uncertainty and gives the reason in the case file; the property package is the other axis. Nothing is adjusted to hit a published number. Scenarios worth adding as soon as their cases are extracted: feed composition ranges for the oil and gas separation plant, part-load points for the CCGT cases, and stack temperature and heat-recovery settings for the boiler tools (analytic, no simulator needed).
+
+## 11. What the two skill packs add (read 2026-11-20, README and ETHOS only; nothing installed)
+Read: `addyosmani/agent-skills` (README: lifecycle spec, plan, build, test, review, ship; small atomic tasks; "tests are proof"; verification gates and anti-rationalisation tables per skill) and `garrytan/gstack` (README and ETHOS.md: sprint of think, plan, build, review, test, ship, reflect; `/test-audit` for tests that cost more than they protect, `/review` with gate integrity, `/qa` for CLIs and APIs, `/eval-plan` to preregister a paid eval, "search before building", "complete coverage, minimal code"). Their skill bodies were not read, their install scripts were not run, and the productivity figures in gstack's ETHOS are the author's claims.
+
+What this plan already does the same way: spec-first case records, one slice at a time with a green suite at the end of each, planted-fault tests, a negative control, a ledger instead of a "done" claim. What to take from them next:
+
+| Idea | Source | Action in this plan |
+|---|---|---|
+| Audit the tests themselves | gstack `/test-audit` | After each phase, check that no test only greps source or asserts nothing, and that every validator rule still has a failing fixture; run it before Phase 1 |
+| Gate integrity: a gate must be able to fail | gstack `/review`, unlazy | The live reproduce gate compares with my own earlier run, so it shows repeatability only. Add an independent oracle per case (a second source) before a case can reach `verified`; already in the testing plan, now a hard rule |
+| Preregister the evaluation | gstack `/eval-plan` | Before the Phase 5 copilot evaluation, write the pass bars, the arms (copilot with and without the tools) and stop rules in a file, then run |
+| Spec before code, small atomic tasks | agent-skills `/spec`, `/plan` | Each new case gets its record written and validated before any run; each extraction is one paper, one commit |
+| Independent review before merge | both | Have the casebook reviewed by a second reader, human or separate agent given the code, not my conclusions, before PR #1 is merged |
+| Search before building | gstack ETHOS | Before the Phase 2 extractor, look at what the surveyed studies (ChemE-as-Code, Aspen Assist) already do for provenance and acceptance criteria |
