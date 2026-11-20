@@ -162,7 +162,8 @@ class DwsimBackend:
         r = self._c("stream_results", name=sid)
         mix = next((ph for ph in r.get("phases", []) if ph.get("name") == "Mixture"), {})
         return {"T": r["temperature_K"] - 273.15, "P": r["pressure_Pa"] / 1e3, "mass": r["mass_flow_kg_s"] * 3600,
-                "mol_s": r["molar_flow_mol_s"], "mass_fractions": {c: v["mass_fraction"] for c, v in mix.get("compounds", {}).items()}}
+                "mol_s": r["molar_flow_mol_s"], "h_kJ_kg": mix.get("enthalpy_kJ_kg"),
+                "vapor_fraction": next((ph.get("fraction") for ph in r.get("phases", []) if ph.get("name") == "Vapor"), None), "mass_fractions": {c: v["mass_fraction"] for c, v in mix.get("compounds", {}).items()}}
 
     def check_solution(self, rel=1e-4) -> list[str]:
         """After a solve: every buffered feed spec and every derived-stream spec must come back from DWSIM. Returns mismatches."""

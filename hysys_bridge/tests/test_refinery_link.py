@@ -43,6 +43,11 @@ class Refinery(unittest.TestCase):
             self.assertFalse(err, r); self.assertAlmostEqual(M.SESSIONS["g"].streams["FEED"].mass_flow_kg_h, r["pool_kg_h"])
             self.assertAlmostEqual(sum(r["surrogate_mass_fractions"].values()), 1.0)
             err, b = call("dwsim_build", name="g", confirm=True); self.assertTrue(b["built"], b)
+            err, e = call("refinery_session_duty", name="g"); self.assertTrue(err); self.assertIn("solve first", e)
+            be = DT.CASES["g"]["be"]; be.last_solve = {"ok": True}          # mock calculates nothing: stand in for a solved case
+            be.read_stream = lambda sid: ({"T": 40.0, "mass": 3600.0, "h_kJ_kg": -300.0, "vapor_fraction": 0.0} if sid == "FEED"
+                                          else {"T": 120.0, "mass": 3600.0, "h_kJ_kg": -100.0, "vapor_fraction": 0.0})
+            err, d = call("refinery_session_duty", name="g"); self.assertAlmostEqual(d["duty_kW"], 200.0); self.assertAlmostEqual(d["duty_kJ_h"], 720000.0)
             err, e = call("refinery_to_session", name="g", slate=slate, throughput_bpd=200000, pool="gasoline_range", heat_to_C=120); self.assertTrue(err); self.assertIn("overwrite", e)
             err, e = call("refinery_to_session", name="h", slate=slate, throughput_bpd=200000, pool="petcoke", heat_to_C=120); self.assertTrue(err); self.assertIn("surrogate", e)
         finally: os.environ.pop("REFINERY_DESIGN_PATH", None)

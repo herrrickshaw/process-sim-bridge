@@ -65,6 +65,23 @@ def t_to_session(a):
             "surrogate_note": "illustrative compounds standing in for a lumped cut; override with `surrogate`", "next": "dwsim_build, then dwsim_solve"}
 
 
+def t_duty(a):
+    """Heater duty of a refinery session after dwsim_solve: m * (h_out - h_in) from DWSIM's own stream enthalpies (server has no unit-duty result)."""
+    from .dwsim import tools as DT
+    c = DT._case(a["name"]); be = c["be"]
+    if not be.last_solve.get("ok"): raise RuntimeError("solve first: duty comes from solved stream enthalpies only")
+    u = next((uid for uid, x in be.units.items() if x["type"] == "heater"), None)
+    if not u: raise ValueError("session has no heater")
+    i, o = be.read_stream(be.units[u]["inlets"][0]), be.read_stream(be.units[u]["outlets"][0])
+    if i["h_kJ_kg"] is None or o["h_kJ_kg"] is None: raise RuntimeError("DWSIM returned no mixture enthalpy")
+    kw = i["mass"] / 3600 * (o["h_kJ_kg"] - i["h_kJ_kg"])
+    return {"unit": u, "duty_kW": kw, "duty_MW": kw / 1e3, "duty_kJ_h": kw * 3600, "specific_kJ_kg": o["h_kJ_kg"] - i["h_kJ_kg"],
+            "inlet": {"T": i["T"], "h_kJ_kg": i["h_kJ_kg"], "vapor_fraction": i["vapor_fraction"]},
+            "outlet": {"T": o["T"], "h_kJ_kg": o["h_kJ_kg"], "vapor_fraction": o["vapor_fraction"]},
+            "backend": "DWSIM" if c["live"] else "mock",
+            "note": "enthalpy basis is DWSIM's; the difference is meaningful, the absolute values are not. Surrogate compounds make this illustrative."}
+
+
 def _s(props, req): return {"type": "object", "properties": props, "required": req, "additionalProperties": False}
 
 TOOLS = {
@@ -77,4 +94,6 @@ TOOLS = {
                                 "heat_to_C": {"type": "number"}, "feed_T_C": {"type": "number"}, "feed_P_kPa": {"type": "number"}, "dp_kPa": {"type": "number"},
                                 "surrogate": {"type": "object"}, "package": {"type": "string"}, "fcc": {"type": "boolean"}, "coker": {"type": "boolean"}, "overwrite": {"type": "boolean"}},
                                ["name", "slate", "throughput_bpd", "pool", "heat_to_C"])),
+    "refinery_session_duty": (t_duty, "Heater duty of a solved refinery session, from DWSIM's inlet and outlet stream enthalpies. Needs dwsim_solve first.",
+                              _s({"name": {"type": "string"}}, ["name"])),
 }
