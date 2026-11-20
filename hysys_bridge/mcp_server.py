@@ -254,6 +254,8 @@ from .safety_link import TOOLS as _SAFETY_TOOLS      # safety_* tools: solved st
 TOOLS.update(_SAFETY_TOOLS)
 from .refinery_link import TOOLS as _REFINERY_TOOLS   # refinery_* tools: whole-refinery screening balance
 TOOLS.update(_REFINERY_TOOLS)
+from .steam_link import TOOLS as _STEAM_TOOLS         # steam_* tools: heat duty -> steam demand vs the NETL B11A cycle
+TOOLS.update(_STEAM_TOOLS)
 
 
 # ---- JSON-RPC / MCP stdio loop ----------------------------------------------------------------------------
