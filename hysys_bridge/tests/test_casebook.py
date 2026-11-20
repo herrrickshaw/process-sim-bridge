@@ -1,7 +1,7 @@
 import copy, json, os, shutil, tempfile, unittest
 from unittest import mock
 from hysys_bridge import mcp_server as M
-from hysys_bridge.casebook import schema, runner, ledger
+from hysys_bridge.casebook import schema, runner, ledger, diagnose
 from hysys_bridge.dwsim.fake import FakeDwsim
 
 CASE = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "cumene-alkylator-feed-heater.json")
@@ -154,6 +154,65 @@ class Runner(unittest.TestCase):
             os.environ.pop("DWSIM_MCP_CMD", None)
             with self.assertRaises(RuntimeError) as e: runner.default_transport()
         self.assertIn("DWSIM_MCP_CMD", str(e.exception))
+
+
+BLOCKER = {"code": "STREAM_DANGLING", "severity": "blocker", "object": "X", "message": "m", "fix": "Connect it."}
+WARNING = {"code": "UNIT_HAD_NO_EFFECT", "severity": "warning", "object": "HE100", "message": "m", "fix": "Check the mode."}
+
+
+def transport_with(check=None, solve=None):
+    """EnthalpyFake whose check and solve answers carry the given findings (the real server returned ok=true on a solve with a blocker finding)."""
+    class F(EnthalpyFake):
+        def call(self, tool, args):
+            r = super().call(tool, args)
+            if tool == "dwsim_flowsheet_check" and check is not None: r = {**r, "findings": check, "blockers": sum(f["severity"] == "blocker" for f in check)}
+            if tool == "dwsim_solve_run" and solve is not None: r = {**r, "findings": solve}
+            return r
+    class T(FakeTransport):
+        def __init__(self): self.fake = F()
+    return T
+
+
+class Findings(unittest.TestCase):
+    def run1(self, T):
+        return runner.run_case(case(), T, packages=["SRK"], scenarios=["base"])["results"][0]
+
+    def test_check_blocker_stops_the_solve_and_names_the_next_step(self):
+        o = self.run1(transport_with(check=[BLOCKER]))
+        self.assertFalse(o["solved"]); self.assertEqual(o["why"]["blocked"], "flowsheet check reports blockers")
+        self.assertEqual(o["findings"][0]["category"], "case_error"); self.assertIn("Never change a published number", o["next_step"])
+
+    def test_ok_true_with_a_blocker_finding_is_not_solved(self):
+        o = self.run1(transport_with(solve=[BLOCKER]))
+        self.assertFalse(o["solved"]); self.assertEqual(o["why"]["blocked"], "solve reported blocker findings"); self.assertTrue(o["why"]["findings"])
+
+    def test_warnings_are_kept_on_a_solved_run_and_reach_the_ledger(self):
+        run = runner.run_case(case(), transport_with(solve=[WARNING]), packages=["SRK"], scenarios=["base"]); o = run["results"][0]
+        self.assertTrue(o["solved"]); self.assertEqual([f["category"] for f in o["findings"]], ["backend_mapping"])
+        self.assertEqual(runner.ledger_rows(run)[0]["findings"], ["UNIT_HAD_NO_EFFECT:warning:HE100"])
+
+    def test_clean_run_has_no_findings(self):
+        self.assertEqual(self.run1(FakeTransport)["findings"], [])
+
+
+class Diagnose(unittest.TestCase):
+    def test_every_code_is_classified_once(self):
+        allc = [c for _, codes in (diagnose.CASE_ERROR, diagnose.BACKEND, diagnose.PLAUSIBILITY, diagnose.CONVERGENCE) for c in codes]
+        self.assertEqual(len(allc), len(set(allc)))
+        self.assertEqual(diagnose.CATEGORY["FEED_NO_FLOW"][0], "case_error"); self.assertEqual(diagnose.CATEGORY["EFFICIENCY_OUT_OF_RANGE"][0], "backend_mapping")
+        self.assertEqual(diagnose.CATEGORY["HX_TEMPERATURE_CROSS"][0], "plausibility"); self.assertEqual(diagnose.CATEGORY["RECYCLE_NO_ESTIMATE"][0], "convergence")
+
+    def test_unknown_code_is_flagged_not_guessed(self):
+        c = diagnose.classify([{"code": "NEW_CODE_2027", "severity": "warning", "object": "A"}])[0]
+        self.assertEqual(c["category"], "unclassified"); self.assertIn("add it to this table", c["loop_action"])
+
+    def test_next_step_prefers_blockers_then_what_we_can_fix(self):
+        mk = lambda code, sev: {"code": code, "severity": sev, "object": "o"}
+        cl = diagnose.classify([mk("HEATER_COOLED", "warning"), mk("UNIT_HAD_NO_EFFECT", "warning"), mk("SPEC_MISSING", "warning")])
+        self.assertEqual(diagnose.next_step(cl), diagnose.CASE_ERROR[0])                                              # case error beats backend mapping beats plausibility
+        cl = diagnose.classify([mk("SPEC_MISSING", "warning"), mk("RECYCLE_NO_ESTIMATE", "blocker")])
+        self.assertEqual(diagnose.next_step(cl), diagnose.CONVERGENCE[0])                                                      # a blocker beats a warning
+        self.assertIsNone(diagnose.next_step([]))
 
 
 class Ledger(unittest.TestCase):

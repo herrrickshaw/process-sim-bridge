@@ -3,7 +3,7 @@ from __future__ import annotations
 import os, shlex
 from .. import hysys_writer
 from ..dwsim.backend import DwsimBackend, StdioTransport
-from . import schema
+from . import diagnose, schema
 
 
 def default_transport():
@@ -40,10 +40,11 @@ def run_case(case: dict, transport_factory=None, packages: list[str] | None = No
             fs = schema.to_flowsheet(sc_case, package); t = (transport_factory or default_transport)()
             try:
                 be = DwsimBackend(t); hysys_writer.write(fs, be)
-                if not be.solve(): out.append({"scenario": scen, "package": package, "solved": False, "why": be.last_solve}); continue
+                solved = be.solve(); found = diagnose.classify(be.last_findings)
+                if not solved: out.append({"scenario": scen, "package": package, "solved": False, "why": be.last_solve, "findings": found, "next_step": diagnose.next_step(found)}); continue
                 cache, vals = {}, {}
                 for r in case["reported"]: vals[r["name"]] = compare(r["value"], _simulated(r, fs, be, cache), case["tolerance"]["pass_rel"])
-                out.append({"scenario": scen, "package": package, "solved": True, "values": vals, "spec_mismatches": be.check_solution()})
+                out.append({"scenario": scen, "package": package, "solved": True, "values": vals, "spec_mismatches": be.check_solution(), "findings": found})
             finally:
                 t.close()
     spread = {}                                                           # across packages, per scenario and reported value
@@ -66,5 +67,10 @@ def reproduce(case: dict, run: dict) -> dict:
 
 
 def ledger_rows(run: dict) -> list[dict]:
-    return [{"case": run["case"], "case_hash": run["case_hash"], "backend": "dwsim-mcp", "scenario": o["scenario"], "package": o["package"], "solved": o["solved"],
-             **({"values": o["values"], "spec_mismatches": o["spec_mismatches"]} if o["solved"] else {"why": o["why"]})} for o in run["results"]]
+    rows = []
+    for o in run["results"]:
+        row = {"case": run["case"], "case_hash": run["case_hash"], "backend": "dwsim-mcp", "scenario": o["scenario"], "package": o["package"], "solved": o["solved"],
+               "findings": [f"{f['code']}:{f['severity']}:{f['object']}" for f in o["findings"]]}
+        row.update({"values": o["values"], "spec_mismatches": o["spec_mismatches"]} if o["solved"] else {"why": o["why"], "next_step": o["next_step"]})
+        rows.append(row)
+    return rows

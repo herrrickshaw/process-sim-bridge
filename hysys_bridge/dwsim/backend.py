@@ -81,6 +81,7 @@ class DwsimBackend:
         self.flushed = False
         self.last_solve: dict = {}
         self.last_dof: dict = {}
+        self.last_findings: list[dict] = []        # diagnostics from the last check/solve: {code, severity, object, message, fix}
 
     def _c(self, logical, **args):
         if logical != "create": args = {"flowsheet_id": self.fid, **args}
@@ -147,14 +148,24 @@ class DwsimBackend:
         self.flushed = True
 
     def solve(self) -> bool:
-        """Flush, refuse to solve while any specification is open, otherwise solve. True only if the server says ok."""
-        self.flush()
+        """Flush, refuse to solve while any specification is open or the flowsheet check reports a blocker, otherwise solve.
+        True only if the server says ok AND the solve reported no blocker finding: the server returns ok=true even for a dangling stream
+        (verified 2026-11-20), so `ok` alone is not enough. All findings (blockers, warnings) are kept in last_findings."""
+        self.flush(); self.last_findings = []
         self.last_dof = self._c("dof")
         if not self.last_dof.get("fully_specified", False):
             open_ = [f"{o['object']}: {', '.join(o.get('missing', []))}" for o in self.last_dof.get("objects", []) if o.get("remaining")]
             self.last_solve = {"ok": False, "blocked": "degrees of freedom still open", "open": open_}
             return False
+        chk = self._c("check"); self.last_findings = list(chk.get("findings", []))
+        blockers = [f for f in self.last_findings if f.get("severity") == "blocker"]
+        if blockers:
+            self.last_solve = {"ok": False, "blocked": "flowsheet check reports blockers", "findings": blockers}
+            return False
         self.last_solve = self._c("solve")
+        self.last_findings = list(self.last_solve.get("findings", self.last_findings))
+        blockers = [f for f in self.last_findings if f.get("severity") == "blocker"]
+        if blockers: self.last_solve = {**self.last_solve, "ok": False, "blocked": "solve reported blocker findings", "findings": blockers}
         return bool(self.last_solve.get("ok"))
 
     def read_stream(self, sid) -> dict:

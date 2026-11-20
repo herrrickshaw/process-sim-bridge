@@ -20,9 +20,9 @@ def main(argv):
         if probs: print("\n".join(probs)); return 1
         run = runner.run_case(case)
         for o in run["results"]:
-            if not o["solved"]: print(f"{o['scenario']:28} {o['package']:14} did not solve: {o['why']}"); continue
+            if not o["solved"]: print(f"{o['scenario']:28} {o['package']:14} did not solve: {o['why']}\n  next step: {o['next_step']}"); continue
             v = "; ".join(f"{n} {x['simulated']:.4g} vs {x['reported']:.4g} ({100 * x['rel_err']:+.1f}%)" for n, x in o["values"].items())
-            print(f"{o['scenario']:28} {o['package']:14} {v}  spec mismatches: {o['spec_mismatches'] or 'none'}")
+            print(f"{o['scenario']:28} {o['package']:14} {v}  spec mismatches: {o['spec_mismatches'] or 'none'}  findings: {[f['code'] for f in o['findings']] or 'none'}")
         for scen, sp in run["package_spread_rel"].items(): print(f"package spread, {scen}: " + ", ".join(f"{n} {100 * x:.1f}%" for n, x in sp.items()))
         if "--no-ledger" not in argv: print(f"ledger rows written: {ledger.append(runner.ledger_rows(run))}")
         if "--reproduce" in argv:
