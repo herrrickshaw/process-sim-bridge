@@ -21,9 +21,10 @@ def main(argv):
         run = runner.run_case(case)
         for o in run["results"]:
             if not o["solved"]: print(f"{o['scenario']:28} {o['package']:14} did not solve: {o['why']}\n  next step: {o['next_step']}"); continue
-            v = "; ".join(f"{n} {x['simulated']:.4g} vs {x['reported']:.4g} ({100 * x['rel_err']:+.1f}%)" for n, x in o["values"].items())
+            v = "; ".join((f"{n} {x['simulated']:.4g} vs {x['reported']:.4g} ({100 * x['rel_err']:+.1f}%)" if x["rel_err"] is not None else f"{n} {x['simulated']:.4g} in {x['range']}: {'yes' if x['within_tol'] else 'NO'}" if "range" in x else f"{n} {x['simulated']:.4g} vs {x['reported']}") for n, x in o["values"].items())
             print(f"{o['scenario']:28} {o['package']:14} {v}  spec mismatches: {o['spec_mismatches'] or 'none'}  findings: {[f['code'] for f in o['findings']] or 'none'}")
         for scen, sp in run["package_spread_rel"].items(): print(f"package spread, {scen}: " + ", ".join(f"{n} {100 * x:.1f}%" for n, x in sp.items()))
+        print(f"within tolerance in the paper's own package ({case['basis']['package_in_paper']}): {run['paper_package_within_tol']}; in every listed package: {run['all_within_tol']}")
         if "--no-ledger" not in argv: print(f"ledger rows written: {ledger.append(runner.ledger_rows(run))}")
         if "--reproduce" in argv:
             r = runner.reproduce(case, run); print(f"{'REPRODUCED' if r['matched'] == r['of'] else 'NOT REPRODUCED'} base {r['matched']}/{r['of']} SOLVED {r['solved']}/{r['total']}")

@@ -13,10 +13,10 @@ Status key: **verified** = built through our casebook or tool path and run on th
 
 | Function | Aspen Plus block (tier) | HYSYS operation | DWSIM server type | Our IR type | Status | Reference case available |
 |---|---|---|---|---|---|---|
-| Mixer | Mixer (official) | Mixer | Mixer | mixer | verified (recycle loop, tutorial) | DWSIM Mixer Basics (not read) |
+| Mixer | Mixer (official) | Mixer | Mixer | mixer | **verified** (recycle loop; mixer tutorial with an independent CoolProp oracle, 9 runs) | done |
 | Splitter | FSplit, SSplit (official: SSplit) | Tee | Splitter | splitter | verified: split ratio (recycle loop), outlet mass flow (earlier) | tutorial recycle loop (done) |
 | Component separator | Sep (secondary) | Component Splitter | ComponentSeparator | none | server has it | none yet |
-| Flash, two phase | Flash2 (official) | Separator | Vessel | separator | server has it; mapped, one earlier flash check, no published case | DWSIM Simple Flash Drum (not read) |
+| Flash, two phase | Flash2 (official) | Separator | Vessel | separator | **verified** against the flash drum tutorial (NRTL matches its values; PR and SRK differ as expected for a polar mixture); port 0 = vapour, port 1 = liquid | done |
 | Flash, three phase | Flash3, Decanter (official) | 3-Phase Separator | Vessel (phase settings unknown) | none | not driven | none |
 | Heater, cooler | Heater (official) | Heater, Cooler | Heater, Cooler | heater, cooler | verified (cumene heater, recycle loop) | done |
 | Heat exchanger | HeatX (official), MHeatX | Heat Exchanger | HeatExchanger | exchanger (in schema, not mapped) | server has it; not driven | DWSIM Heat Exchanger Design (not read) |
@@ -46,7 +46,7 @@ Status key: **verified** = built through our casebook or tool path and run on th
 5. Aspen's certification objectives that matter for the loops: convergence (tear streams, Newton), sensitivity analysis, design specs, heat streams on a heater, and the dew-point outlet specification. Each has a DWSIM counterpart in section 2 and a pending case.
 
 ## 4. Suggested order for the next cases (each is one slice with its own reference)
-1. Simple flash drum and mixer from the DWSIM tutorials (cheap; confirms the separator mapping on a published result).
+1. ~~Simple flash drum and mixer~~ done (architecture doc section 15).
 2. Heater and cooler duties from the same tutorial set; then heat exchanger design.
 3. Refrigeration cycle (compressor, valve, evaporator, condenser): first loop with a compressor and valve and a published coefficient of performance.
 4. Conversion reactor, then ammonia or methanol synthesis (reactor plus recycle plus purge).

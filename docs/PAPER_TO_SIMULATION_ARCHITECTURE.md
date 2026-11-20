@@ -204,3 +204,26 @@ Consequences:
 - `recycle` is now an accepted unit type in the case schema and is on the verified list (`UNIT_PARAMS_VERIFIED`), with this case as the evidence; the splitter's `split_ratio` parameter reaches the server (a unit test that drops the parameter fails, and a mutation check confirmed it).
 - Case records can now carry unit parameters (`units[].params`), computed streams without a published T and P, mass-flow reference values (`stream_mass_kg_h`), and scenario overrides on units and on reported values (each scenario states its own expected result).
 - Still open for recycles: acceleration and tolerance settings are not exposed in the case schema; the estimate ladder is unexercised; no loop with a phase change, a purge or a reactor yet. The DWSIM tutorial's own exercise "100% recycle" (split 0/1) should fail to converge and is a good negative control to add.
+
+## 15. Phase 1, cases 3 and 4: the DWSIM mixer and flash drum tutorials (built and run 2026-11-20)
+Both tutorial pages were read in full first. Cases: `water-mixer-tutorial` and `water-ethanol-flash-drum-tutorial`.
+
+**Mixer** (100 kg/s water at 300 K and 50 kg/s at 348 K, 1 atm). The tutorial's "~316 K" is rounded, so the reference temperature comes from an independent enthalpy balance with CoolProp (IAPWS-95): 316.0141 K. Scenarios: flows swapped (332.0199 K) and equal flows (324.0193 K), each with its own independently computed expectation. 9 runs (3 scenarios x Steam Tables, Peng-Robinson, SRK), all solved, no findings, all within tolerance. Temperature error against the independent value: Steam Tables -0.004 K, SRK -0.003 to -0.008 K, Peng-Robinson +0.016 to +0.020 K. Outlet mass flow exact (540,000 kg/h), pressure 101.325 kPa, vapour fraction 0.
+
+**Flash drum** (1 kg/s of 50/50 water and ethanol by mass, 300 K, heated to 360 K, 1 atm, then a separator vessel; NRTL). The tutorial gives ranges and rounded "~" values, not exact ones, and no independent oracle exists in this repo for NRTL water/ethanol, so the case checks the published ranges, the exact mass balance, the approximate values with a 5% tolerance (two digits, "depends on NRTL"), and two scenarios derived from its stated bubble (about 355 K) and dew (about 365 K) points: 350 K must give no vapour, 370 K no liquid. 9 runs, all solved, no findings.
+
+| Package | Vapour fraction (mole) | Vapour, liquid kg/h | Ethanol mass fraction, vapour / liquid | Against the tutorial |
+|---|---|---|---|---|
+| NRTL (the tutorial's) | 0.548 | 2298 / 1302 | 0.661 / 0.216 | all checks pass; approximate values within 0.3%, 0.5%, 0.1% and 1.8% |
+| Peng-Robinson | 0.662 | 2750 / 850 | 0.653 / **0.006** | ranges pass; approximate values fail (+19%, -34%, ... -97%) |
+| SRK | 0.620 | 2645 / 955 | 0.678 / **0.007** | same |
+
+Reading: with NRTL the server reproduces the tutorial's numbers. Peng-Robinson and SRK without binary interaction parameters put almost all the ethanol in the vapour (liquid ethanol 0.6%), which is wrong for this polar mixture, exactly the warning in the DWSIM documentation ("PR or Raoult's law for a polar mixture misses the azeotrope"). The range checks alone would have passed these two packages, so the case's approximate-value checks are what catch it: a useful result about the case design, and a reason to prefer point references over inequalities where a source gives them. The run now reports "within tolerance in the paper's own package" separately from "in every listed package" (flash: true and false; mixer: both true), because a comparison package that fails is information, not a failure of the case.
+
+What changed in the casebook for these cases:
+- reported values can be a published **range** (inclusive) instead of a point; a per-value `pass_rel` overrides the case default; new kinds `stream_vapor_fraction`, `stream_mass_fraction` (per compound) and `streams_mass_sum_kg_h` (mass balance over several streams);
+- scenarios can **drop** expectations that do not apply (the composition of an empty stream);
+- a separator's two outlets must declare `phase` as vapour then liquid, in that file order, because the server's vessel takes them as port 0 and port 1 (probed: port 0 is the vapour); a test with swapped ports fails the case, and the validator rejects the wrong order.
+- Mutation check on the new logic: all but one mutant were caught on the first pass; the survivor (compound selection in the mass-fraction reader) exposed that the stand-in carried only one compound, fixed, and the same mutant is now caught.
+
+Status: `separator` (Vessel) and `mixer` are now each backed by published-case runs; both cases stay at status `built` until a person reviews them. Ledger: 9 rows each (hashes ddf8a5109b42 and ddaca6816703).

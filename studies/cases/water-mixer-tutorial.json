@@ -1,0 +1,214 @@
+{
+ "id": "water-mixer-tutorial",
+ "source": {
+  "title": "DWSIM Tutorials: Mixer Basics (adiabatic mixing of two water streams)",
+  "doi": null,
+  "url": "https://dwsim.org/tutorials/en/beginner/02-mixer-basics.html",
+  "licence": "DWSIM project documentation (licence not checked; facts only)",
+  "use": "facts-only (specification and expected values); no text copied",
+  "read": "full-text",
+  "fetch_route": "direct GET via fetch_source.py",
+  "note": "the tutorial's expected temperature is the rounded '~316 K'; the point values used here come from an independent calculation, see the reported anchors"
+ },
+ "basis": {
+  "compounds": [
+   "Water"
+  ],
+  "package_in_paper": "Steam Tables",
+  "packages": [
+   "Steam Tables",
+   "Peng-Robinson",
+   "SRK"
+  ],
+  "composition_basis": "mole",
+  "molar_mass_g_mol": {
+   "Water": 18.01528
+  },
+  "molar_mass_source": "standard atomic weights",
+  "enthalpy_reference": "not used; outlet temperature follows from an enthalpy balance"
+ },
+ "streams": [
+  {
+   "id": "INLET_1",
+   "role": "feed",
+   "src": null,
+   "dst": "MIX",
+   "T": {
+    "value": 26.85,
+    "unit": "C",
+    "anchor": "DWSIM tutorial 'Mixer Basics' (beginner/02-mixer-basics): 300 K"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "DWSIM tutorial 'Mixer Basics' (beginner/02-mixer-basics): 1 atm"
+   },
+   "mass_flow": {
+    "value": 360000.0,
+    "unit": "kg/h",
+    "anchor": "DWSIM tutorial 'Mixer Basics' (beginner/02-mixer-basics): 100 kg/s"
+   },
+   "composition": {
+    "values": {
+     "Water": 1.0
+    },
+    "provenance": {
+     "Water": "reported"
+    }
+   }
+  },
+  {
+   "id": "INLET_2",
+   "role": "feed",
+   "src": null,
+   "dst": "MIX",
+   "T": {
+    "value": 74.85,
+    "unit": "C",
+    "anchor": "DWSIM tutorial 'Mixer Basics' (beginner/02-mixer-basics): 348 K"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "DWSIM tutorial 'Mixer Basics' (beginner/02-mixer-basics): 1 atm"
+   },
+   "mass_flow": {
+    "value": 180000.0,
+    "unit": "kg/h",
+    "anchor": "DWSIM tutorial 'Mixer Basics' (beginner/02-mixer-basics): 50 kg/s"
+   },
+   "composition": {
+    "values": {
+     "Water": 1.0
+    },
+    "provenance": {
+     "Water": "reported"
+    }
+   }
+  },
+  {
+   "id": "OUTLET",
+   "role": "product",
+   "src": "MIX",
+   "dst": null
+  }
+ ],
+ "units": [
+  {
+   "id": "MIX",
+   "type": "mixer"
+  }
+ ],
+ "reported": [
+  {
+   "name": "outlet_T",
+   "kind": "stream_T_C",
+   "target": "OUTLET",
+   "value": 42.8641,
+   "unit": "C",
+   "anchor": "DWSIM tutorial 'Mixer Basics' (beginner/02-mixer-basics) results table: ~316 K; independent value 316.0141 K (42.8641 C) from an enthalpy balance with CoolProp IAPWS-95 at 1 atm, computed 2026-11-20",
+   "precision": "4 decimals, independent calculation"
+  },
+  {
+   "name": "outlet_mass",
+   "kind": "stream_mass_kg_h",
+   "target": "OUTLET",
+   "value": 540000.0,
+   "unit": "kg/h",
+   "anchor": "DWSIM tutorial 'Mixer Basics' (beginner/02-mixer-basics) results table: 150.0 kg/s (mass conservation)",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "outlet_P",
+   "kind": "stream_P_kPa",
+   "target": "OUTLET",
+   "value": 101.325,
+   "unit": "kPa",
+   "anchor": "DWSIM tutorial 'Mixer Basics' (beginner/02-mixer-basics) results table: 101325 Pa",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "outlet_vapor_fraction",
+   "kind": "stream_vapor_fraction",
+   "target": "OUTLET",
+   "range": [
+    0.0,
+    0.001
+   ],
+   "unit": "-",
+   "anchor": "DWSIM tutorial 'Mixer Basics' (beginner/02-mixer-basics) results table: vapor fraction 0.0 (liquid)"
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.005,
+  "note": "0.5% of the outlet temperature in C is about 0.2 K; the packages differ in water liquid enthalpy, so the spread across packages is reported"
+ },
+ "scenarios": [
+  {
+   "id": "flows-swapped",
+   "why": "swap the two flows (50 kg/s cold, 100 kg/s hot): the same independent enthalpy balance gives 332.0199 K, so the temperature moves toward the larger stream",
+   "overrides": [
+    {
+     "stream": "INLET_1",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 180000.0
+    },
+    {
+     "stream": "INLET_2",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 360000.0
+    },
+    {
+     "reported": "outlet_T",
+     "path": [
+      "value"
+     ],
+     "set": 58.8699
+    }
+   ]
+  },
+  {
+   "id": "equal-flows",
+   "why": "equal flows of 100 kg/s: the independent balance gives 324.0193 K and the mass flow is 200 kg/s",
+   "overrides": [
+    {
+     "stream": "INLET_2",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 360000.0
+    },
+    {
+     "reported": "outlet_T",
+     "path": [
+      "value"
+     ],
+     "set": 50.8693
+    },
+    {
+     "reported": "outlet_mass",
+     "path": [
+      "value"
+     ],
+     "set": 720000.0
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "expected temperatures recomputed independently with CoolProp (IAPWS-95) from the enthalpy balance; mass balance exact",
+  "human": false
+ },
+ "status": "built"
+}

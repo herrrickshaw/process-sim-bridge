@@ -5,6 +5,8 @@ from hysys_bridge.casebook import schema, runner, ledger, diagnose
 from hysys_bridge.dwsim.fake import FakeDwsim
 
 CASE = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "cumene-alkylator-feed-heater.json")
+MIXER = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-mixer-tutorial.json")
+FLASH = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-ethanol-flash-drum-tutorial.json")
 LOOP = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-recycle-loop-tutorial.json")
 
 
@@ -277,6 +279,98 @@ class Recycle(unittest.TestCase):
         within = {o["scenario"]: all(v["within_tol"] for v in o["values"].values()) for o in run["results"]}
         self.assertFalse(within["base"]); self.assertTrue(within["split-0.5"])                                    # only the scenario that happens to equal the default passes
         self.assertFalse(run["all_within_tol"])
+
+
+class FlashFake(FakeDwsim):
+    """Water/ethanol flash drum in closed form from the heater outlet temperature: vapour (mole) fraction 0 up to 350 K, 0.55 at 360 K, 1 from 370 K, with 0.64 of the mass in the vapour; vapour carries 0.66
+    ethanol, liquid 0.22 (the tutorial's rounded values). The separator's first outlet port gets the vapour, the second the liquid, like the real Vessel."""
+    swap = False
+    def call(self, tool, args):
+        r = super().call(tool, args)
+        if tool == "dwsim_stream_get_results":
+            t = self.params.get("H", {}).get("OutletTemperature", 360.0); vf = 0.0 if t <= 350 else 1.0 if t >= 370 else 0.55; mshare = 0.0 if t <= 350 else 1.0 if t >= 370 else 0.64; n = args["name"]
+            port = {"V": None}; sep = self.ports.get("SEP", {})
+            idx = sep.get(n, ("", None))[1] if sep.get(n, ("",))[0] == "product_stream" else None
+            if idx is not None and self.swap: idx = 1 - idx
+            mass, x_et = {"FEED": (1.0, 0.5), "TWO_PHASE": (1.0, 0.5)}.get(n, (None, None))
+            if idx == 0: mass, x_et = mshare, 0.66 if vf else 0.5
+            if idx == 1: mass, x_et = 1 - mshare, 0.22 if vf < 1 else 0.5
+            r = {**r, "mass_flow_kg_s": mass, "phases": [{"name": "Mixture", "enthalpy_kJ_kg": 0.0, "compounds": {"Water": {"mass_fraction": 1 - x_et}, "Ethanol": {"mass_fraction": x_et}}}, {"name": "Vapor", "fraction": vf if n in ("TWO_PHASE",) else (1.0 if idx == 0 else 0.0)}]}
+        return r
+
+
+class FlashTransport(FakeTransport):
+    swap = False
+    def __init__(self): self.fake = FlashFake(); self.fake.swap = self.swap
+
+
+class SwappedFlash(FlashTransport):
+    swap = True
+
+
+class RangesAndFlash(unittest.TestCase):
+    def flash(self): return schema.load(FLASH)
+
+    def test_cases_are_valid(self):
+        for f in (MIXER, FLASH): self.assertEqual(schema.validate(schema.load(f)), [], f)
+
+    def planted(self, mutate, needle, base=None):
+        c = (base or self.flash)(); mutate(c); probs = schema.validate(c); self.assertTrue(any(needle in x for x in probs), (needle, probs))
+
+    def test_range_and_new_kind_faults(self):
+        self.planted(lambda c: c["reported"][0].update(range=[0.8, 0.4]), "range must be")
+        self.planted(lambda c: c["reported"][0].update(range=[0.4]), "range must be")
+        self.planted(lambda c: c["reported"][0].update(unit="kg/h"), "unit")
+        self.planted(lambda c: c["reported"][0].pop("anchor"), "anchor")
+        self.planted(lambda c: c["reported"][5].update(targets=["VAPOR", "NOPE"]), "targets must be")
+        self.planted(lambda c: c["reported"][3].update(compound="Xenon"), "compound must be")
+        self.planted(lambda c: c["reported"][6].update(pass_rel=2), "pass_rel")
+        self.planted(lambda c: c["scenarios"][0].update(drop_reported="vapor_mass_flow"), "drop_reported")
+        self.planted(lambda c: c["streams"].reverse(), "'vapor' then 'liquid'")                                      # file order decides the Vessel's ports
+        self.planted(lambda c: c["streams"][2].update(phase="liquid"), "'vapor' then 'liquid'")
+
+    def test_compare_item(self):
+        r = {"range": [0.4, 0.8]}; self.assertTrue(runner.compare_item(r, 0.4, 0.05)["within_tol"]); self.assertTrue(runner.compare_item(r, 0.8, 0.05)["within_tol"])
+        self.assertFalse(runner.compare_item(r, 0.801, 0.05)["within_tol"]); self.assertFalse(runner.compare_item(r, 0.399, 0.05)["within_tol"])
+        self.assertIsNone(runner.compare_item(r, 0.5, 0.05)["rel_err"])
+        p = {"value": 100.0, "pass_rel": 0.01}; self.assertTrue(runner.compare_item(p, 100.9, 0.5)["within_tol"]); self.assertFalse(runner.compare_item(p, 101.1, 0.5)["within_tol"])   # own tolerance beats the default
+        self.assertTrue(runner.compare_item({"value": 100.0}, 104.0, 0.05)["within_tol"])                                                                                       # default applies
+
+    def test_drop_reported_removes_only_what_it_names(self):
+        c = self.flash(); sc = schema.apply_scenario(c, "below-bubble-point"); names = {r["name"] for r in sc["reported"]}; base = {r["name"] for r in c["reported"]}
+        self.assertEqual(base - names, {"vapor_ethanol_fraction_enriched", "liquid_ethanol_fraction_depleted", "vapor_mass_flow_approx", "liquid_mass_flow_approx", "vapor_ethanol_fraction_approx", "liquid_ethanol_fraction_approx"})
+        self.assertEqual(sc["scenarios"], []); self.assertEqual(schema.validate(sc), [])                              # an applied scenario is a plain case
+        self.assertEqual(next(r for r in sc["reported"] if r["name"] == "two_phase_vapor_fraction")["range"], [0.0, 0.001])
+
+    def test_flash_runs_every_scenario_and_passes_the_paper_package(self):
+        run = runner.run_case(self.flash(), FlashTransport, packages=["NRTL"])
+        self.assertEqual(len(run["results"]), 3); self.assertTrue(run["all_within_tol"], [(o["scenario"], {k: v for k, v in o["values"].items() if not v["within_tol"]}) for o in run["results"]])
+        self.assertTrue(run["paper_package_within_tol"])
+
+    def test_swapped_separator_ports_are_caught(self):
+        run = runner.run_case(self.flash(), SwappedFlash, packages=["NRTL"]); self.assertFalse(run["all_within_tol"])
+        bad = {k for o in run["results"] if o["scenario"] == "base" for k, v in o["values"].items() if not v["within_tol"]}
+        self.assertIn("vapor_mass_flow_approx", bad); self.assertIn("vapor_ethanol_fraction_enriched", bad)
+
+    def test_paper_package_is_reported_separately(self):
+        class Biased(FlashTransport):                                                                               # every package other than NRTL gets a wrong answer
+            def __init__(self):
+                super().__init__(); f = self.fake; orig = f.call
+                def call(tool, args):
+                    r = orig(tool, args)
+                    if tool == "dwsim_stream_get_results" and f.package != "NRTL" and args["name"] == "VAPOR": r = {**r, "mass_flow_kg_s": r["mass_flow_kg_s"] * 1.3}
+                    return r
+                f.call = call
+        run = runner.run_case(self.flash(), Biased, scenarios=["base"])
+        self.assertTrue(run["paper_package_within_tol"]); self.assertFalse(run["all_within_tol"])
+
+    def test_mixer_case_values_and_a_wrong_temperature_is_caught(self):
+        m = schema.load(MIXER); r = {x["name"]: x for x in m["reported"]}
+        self.assertEqual(r["outlet_mass"]["value"], 540000.0); self.assertAlmostEqual(r["outlet_T"]["value"], 316.0141 - 273.15, places=4)
+        s = {x["name"]: x["value"] for x in schema.apply_scenario(m, "equal-flows")["reported"] if "value" in x}; self.assertEqual(s["outlet_mass"], 720000.0)
+        for sid in ("flows-swapped", "equal-flows"):
+            fs = schema.to_flowsheet(schema.apply_scenario(m, sid), "SRK"); self.assertEqual(fs.streams["OUTLET"].P_kPa, None)
+        self.assertAlmostEqual(schema.to_flowsheet(schema.apply_scenario(m, "flows-swapped"), "SRK").streams["INLET_1"].mass_flow_kg_h, 180000.0)
 
 
 class Ledger(unittest.TestCase):

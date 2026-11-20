@@ -18,12 +18,26 @@ def _simulated(r, fs, be, cache):
         u = fs.units[r["target"]]; a, b = rs(u.inlets[0]), rs(u.outlets[0])
         if a["h_kJ_kg"] is None or b["h_kJ_kg"] is None: raise RuntimeError("DWSIM returned no enthalpy for the unit's streams")
         return (b["h_kJ_kg"] - a["h_kJ_kg"]) * a["mass"]                         # kJ/h from the stream enthalpies (the server has no unit-duty result)
-    return rs(r["target"])[{"stream_T_C": "T", "stream_P_kPa": "P", "stream_mass_kg_h": "mass"}[r["kind"]]]
+    if r["kind"] == "streams_mass_sum_kg_h": return sum(rs(t)["mass"] for t in r["targets"])
+    if r["kind"] == "stream_mass_fraction":
+        mf = rs(r["target"])["mass_fractions"]
+        if r["compound"] not in mf: raise RuntimeError(f"DWSIM returned no mass fraction of {r['compound']} for {r['target']}")
+        return mf[r["compound"]]
+    v = rs(r["target"])[{"stream_T_C": "T", "stream_P_kPa": "P", "stream_mass_kg_h": "mass", "stream_vapor_fraction": "vapor_fraction"}[r["kind"]]]
+    if v is None: raise RuntimeError(f"DWSIM returned no {r['kind']} for {r['target']}")
+    return v
 
 
 def compare(reported: float, simulated: float, pass_rel: float) -> dict:
     rel = (simulated - reported) / abs(reported) if reported else None
     return {"reported": reported, "simulated": simulated, "rel_err": rel, "within_tol": rel is not None and abs(rel) <= pass_rel}
+
+
+def compare_item(r: dict, simulated: float, default_pass_rel: float) -> dict:
+    """One reported value: a point (relative error against its tolerance, the item's own pass_rel if it has one) or a published range (inside it, inclusive)."""
+    if "range" in r:
+        lo, hi = r["range"]; return {"range": [lo, hi], "reported": None, "simulated": simulated, "rel_err": None, "within_tol": lo <= simulated <= hi}
+    return compare(r["value"], simulated, r.get("pass_rel", default_pass_rel))
 
 
 def run_case(case: dict, transport_factory=None, packages: list[str] | None = None, scenarios: list[str] | None = None) -> dict:
@@ -43,16 +57,18 @@ def run_case(case: dict, transport_factory=None, packages: list[str] | None = No
                 solved = be.solve(); found = diagnose.classify(be.last_findings)
                 if not solved: out.append({"scenario": scen, "package": package, "solved": False, "why": be.last_solve, "findings": found, "next_step": diagnose.next_step(found)}); continue
                 cache, vals = {}, {}
-                for r in sc_case["reported"]: vals[r["name"]] = compare(r["value"], _simulated(r, fs, be, cache), case["tolerance"]["pass_rel"])
+                for r in sc_case["reported"]: vals[r["name"]] = compare_item(r, _simulated(r, fs, be, cache), case["tolerance"]["pass_rel"])
                 out.append({"scenario": scen, "package": package, "solved": True, "values": vals, "spec_mismatches": be.check_solution(), "findings": found})
             finally:
                 t.close()
     spread = {}                                                           # across packages, per scenario and reported value
     for scen in sn:
         sv = [o for o in out if o["scenario"] == scen and o["solved"]]
-        if len(sv) > 1: spread[scen] = {r["name"]: (max(o["values"][r["name"]]["simulated"] for o in sv) - min(o["values"][r["name"]]["simulated"] for o in sv)) / abs(r["value"]) for r in schema.apply_scenario(case, scen)["reported"] if r["value"]}
+        if len(sv) > 1: spread[scen] = {r["name"]: (max(o["values"][r["name"]]["simulated"] for o in sv) - min(o["values"][r["name"]]["simulated"] for o in sv)) / abs(r["value"]) for r in schema.apply_scenario(case, scen)["reported"] if r.get("value")}
     solved = [o for o in out if o["solved"]]
+    own = [o for o in solved if o["package"] == case["basis"]["package_in_paper"]]
     return {"case": case["id"], "case_hash": schema.case_hash(case), "ran": True, "results": out, "package_spread_rel": spread,
+            "paper_package_within_tol": bool(own) and len(own) == sum(o["package"] == case["basis"]["package_in_paper"] for o in out) and all(v["within_tol"] for o in own for v in o["values"].values()),
             "all_within_tol": bool(solved) and len(solved) == len(out) and all(v["within_tol"] for o in solved for v in o["values"].values()),
             "note": "within tolerance is not verification: a human reviews the case, the package spread and the scenario effects before status becomes verified"}
 

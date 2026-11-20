@@ -12,7 +12,7 @@ NEEDS_REVIEW = {"reviewed", "built", "verified"}
 READ = {"full-text", "abstract-only", "snippet-only"}
 UNIT_TYPES = {"mixer", "splitter", "pump", "heater", "cooler", "valve", "compressor", "separator", "column", "reactor", "exchanger", "recycle"}
 SPEC_BY_OUTLET = {"heater", "cooler", "pump", "valve", "compressor"}      # units whose outlet stream carries the published specification, so T and P are required there
-KINDS = {"unit_duty": "kJ/h", "stream_T_C": "C", "stream_P_kPa": "kPa", "stream_mass_kg_h": "kg/h"}
+KINDS = {"unit_duty": "kJ/h", "stream_T_C": "C", "stream_P_kPa": "kPa", "stream_mass_kg_h": "kg/h", "stream_vapor_fraction": "-", "stream_mass_fraction": "-", "streams_mass_sum_kg_h": "kg/h"}
 TOP = ("id", "source", "basis", "streams", "units", "reported", "tolerance", "status")
 
 
@@ -84,15 +84,30 @@ def validate(case: dict) -> list[str]:
                 if how not in ("reported", "assumed", "reconstructed"): p.append(f"{pa}.composition.provenance[{k}] must be reported, assumed or reconstructed")
             if set(v) - set(c.get("provenance") or {}): p.append(f"{pa}.composition.provenance must cover every compound")
             if "reconstructed" in (c.get("provenance") or {}).values() and not c.get("check"): p.append(f"{pa}.composition is reconstructed: say in composition.check how it was confirmed")
+    for uid, u in units.items():                                # a separator's outlets are connected in file order: port 0 = vapour, port 1 = liquid (verified on the DWSIM Vessel, 2026-11-20)
+        if u.get("type") != "separator": continue
+        outs = [x for x in case["streams"] if x.get("src") == uid]
+        ph = [x.get("phase") for x in outs]
+        if ph != ["vapor", "liquid"]: p.append(f"unit {uid}: a separator needs exactly two outlet streams with phase 'vapor' then 'liquid' in that file order, got {ph}")
     names = set()
     for i, r in enumerate(case["reported"]):
         pa = f"reported[{r.get('name', i)}]"
         if not r.get("name") or r["name"] in names: p.append(f"{pa}: name missing or duplicated")
         names.add(r.get("name"))
         if r.get("kind") not in KINDS: p.append(f"{pa}.kind must be one of {sorted(KINDS)}"); continue
-        _qty(pa, r, {KINDS[r["kind"]]}, p)
-        if r["kind"] == "unit_duty" and r.get("target") not in units: p.append(f"{pa}.target must be a unit id")
-        if r["kind"] != "unit_duty" and r.get("target") not in ids: p.append(f"{pa}.target must be a stream id")
+        if "range" in r:                                        # a published range ("0.4 - 0.8") instead of a point value
+            rg = r["range"]
+            if not (isinstance(rg, list) and len(rg) == 2 and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in rg) and rg[0] <= rg[1]): p.append(f"{pa}.range must be [low, high] numbers with low <= high")
+            if r.get("unit") != KINDS[r["kind"]]: p.append(f"{pa}: unit {r.get('unit')!r} must be one of {[KINDS[r['kind']]]}")
+            if not (r.get("anchor") or r.get("assumed")): p.append(f"{pa}: needs an anchor (where in the source) or an assumed reason")
+        else: _qty(pa, r, {KINDS[r["kind"]]}, p)
+        if "pass_rel" in r and not (isinstance(r["pass_rel"], (int, float)) and 0 < r["pass_rel"] <= 1): p.append(f"{pa}.pass_rel must be in (0, 1]")
+        if r["kind"] == "unit_duty":
+            if r.get("target") not in units: p.append(f"{pa}.target must be a unit id")
+        elif r["kind"] == "streams_mass_sum_kg_h":
+            if not (isinstance(r.get("targets"), list) and r["targets"] and set(r["targets"]) <= ids): p.append(f"{pa}.targets must be a non-empty list of stream ids")
+        elif r.get("target") not in ids: p.append(f"{pa}.target must be a stream id")
+        if r["kind"] == "stream_mass_fraction" and r.get("compound") not in comps: p.append(f"{pa}.compound must be one of the case's compounds")
     if not case["reported"]: p.append("reported is empty: a case without a published result to compare against is not a reference case")
     base_problems = validate({**case, "scenarios": [], "reproduce": None}) if case.get("scenarios") else []   # a scenario reports only the problems it adds, not the base case's again
     ssc = set()
@@ -102,6 +117,7 @@ def validate(case: dict) -> list[str]:
         ssc.add(sc.get("id"))
         if not sc.get("why"): p.append(f"{pa}.why is required: a scenario varies something inside a stated uncertainty, not to fit the answer")
         if not sc.get("overrides"): p.append(f"{pa}.overrides is empty")
+        if not isinstance(sc.get("drop_reported", []), list): p.append(f"{pa}.drop_reported must be a list of reported names")
         else:
             try: sub = apply_scenario(case, sc["id"]); p += [f"{pa}: {x}" for x in validate({**sub, "scenarios": [], "reproduce": None}) if x not in base_problems]
             except (KeyError, IndexError, TypeError) as e: p.append(f"{pa}: an override path does not exist ({e!r})")
@@ -138,6 +154,10 @@ def apply_scenario(case: dict, scenario_id: str) -> dict:
         for k in o["path"][:-1]: node = node[k]
         if o["path"][-1] not in node: raise KeyError(o["path"][-1])
         node[o["path"][-1]] = o["set"]
+    drop = set(sc.get("drop_reported", []))                                  # expectations that do not apply in this scenario (e.g. compositions of an empty stream)
+    if drop - {r["name"] for r in c["reported"]}: raise KeyError(f"drop_reported names unknown reported values: {sorted(drop - {r['name'] for r in c['reported']})}")
+    c["reported"] = [r for r in c["reported"] if r["name"] not in drop]
+    c["scenarios"] = []                                                      # already applied: re-validating the result must not apply them again
     return c
 
 
