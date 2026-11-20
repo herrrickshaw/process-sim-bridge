@@ -124,17 +124,32 @@ class Boiler(unittest.TestCase):
     def test_economiser(self):
         base = dict(steam_kg_h=10000.0, steam_P_kPa=1000.0, blowdown_pct=2.0)
         err, r = call("utility_boiler", economiser=True, **base); self.assertFalse(err, r)
-        e = r["economiser"]; H = lambda T: CoolProp.CoolProp.PropsSI("H", "P", 1e6, "T", T + 273.15, "Water") / 1e3
+        e = r["economiser"]; hr = r["heat_recovery"]; H = lambda T: CoolProp.CoolProp.PropsSI("H", "P", 1e6, "T", T + 273.15, "Water") / 1e3
         self.assertAlmostEqual(r["stack_T_C"], r["feedwater_T_C"] + 40.0)                                                  # stack = feedwater inlet + approach
         self.assertAlmostEqual(e["duty_kW"], r["feedwater_kg_h"] * (H(e["feedwater_out_C"]) - r["feedwater_h_kJ_kg"]) / 3600, delta=1e-6 * e["duty_kW"])
         self.assertAlmostEqual(e["duty_kW"] + e["evaporator_duty_kW"], r["heat_to_water_kW"])
-        self.assertAlmostEqual(e["fuel_kW_lhv_without"] * e["efficiency_lhv_without"], r["heat_to_water_kW"])
-        self.assertAlmostEqual(e["fuel_saving_pct"], 100 * (1 - e["efficiency_lhv_without"] / r["efficiency_lhv"]), places=9)
-        self.assertGreater(r["efficiency_lhv"], e["efficiency_lhv_without"]); self.assertGreater(e["feedwater_out_C"], r["feedwater_T_C"])
+        self.assertAlmostEqual(hr["fuel_kW_lhv_without"] * hr["efficiency_lhv_without"], r["heat_to_water_kW"])
+        self.assertAlmostEqual(hr["fuel_saving_pct"], 100 * (1 - hr["efficiency_lhv_without"] / r["efficiency_lhv"]), places=9)
+        self.assertGreater(r["efficiency_lhv"], hr["efficiency_lhv_without"]); self.assertGreater(e["feedwater_out_C"], r["feedwater_T_C"])
         self.assertLess(call("utility_boiler", economiser=True, economiser_approach_K=20.0, **base)[1]["fuel_kg_h"], r["fuel_kg_h"])      # colder stack, less fuel
-        self.assertGreater(e["fuel_saving_pct"], 0.0); self.assertIn("economiser_approach_K", r["assumed_defaults"])
-        for bad in (dict(stack_T_C=150.0), dict(efficiency_lhv=0.9), dict(economiser_gas_in_C=140.0), dict(economiser_gas_in_C=900.0, feedwater_T_C=150.0)):
+        self.assertGreater(hr["fuel_saving_pct"], 0.0); self.assertIn("economiser_approach_K", r["assumed_defaults"])
+        for bad in (dict(stack_T_C=150.0), dict(efficiency_lhv=0.9), dict(gas_exit_C=140.0), dict(gas_exit_C=900.0, feedwater_T_C=150.0)):
             self.assertTrue(call("utility_boiler", economiser=True, **{**base, **bad})[0], bad)
+
+    def test_air_preheater(self):
+        base = dict(steam_kg_h=10000.0, steam_P_kPa=1000.0, blowdown_pct=2.0)
+        err, r = call("utility_boiler", air_preheater=True, **base); self.assertFalse(err, r)
+        a, hr, c = r["air_preheater"], r["heat_recovery"], r["combustion"]; n_air = c["air_mol_per_mol_fuel"]
+        self.assertEqual(r["stack_T_C"], 130.0); self.assertEqual(a["gas_in_C"], 280.0); self.assertGreater(a["air_out_C"], 100.0); self.assertLess(a["air_out_C"], 280.0)
+        mol_s = r["fuel_kW_lhv"] / r["fuel_lhv_kJ_mol"]; from hysys_bridge import utilities_link as U
+        h_air = lambda T: n_air * (0.2095 * U._ideal_h("Oxygen", T) + (1 - 0.2095) * U._ideal_h("Nitrogen", T))
+        self.assertAlmostEqual(a["duty_kW"], mol_s * (h_air(a["air_out_C"]) - h_air(25.0)), delta=1e-6 * a["duty_kW"])        # gas heat = air heat
+        self.assertGreater(hr["fuel_saving_pct"], 0.0); self.assertGreater(r["efficiency_lhv"], hr["efficiency_lhv_without"])
+        both = call("utility_boiler", air_preheater=True, economiser=True, **base)[1]                                       # train: gas 280 -> 145 (economiser) -> 130 (air preheater)
+        self.assertEqual(both["air_preheater"]["gas_in_C"], 145.0); self.assertAlmostEqual(both["heat_recovery"]["stack_T_C"], 130.0)
+        self.assertAlmostEqual(both["economiser"]["duty_kW"] + both["air_preheater"]["duty_kW"], both["fuel_kW_lhv"] * (both["efficiency_lhv"] - both["heat_recovery"]["efficiency_lhv_without"]), delta=1e-6 * both["fuel_kW_lhv"])
+        for bad in (dict(stack_T_C=150.0), dict(efficiency_lhv=0.9), dict(air_preheater_gas_out_C=300.0), dict(air_preheater_gas_out_C=27.0)):
+            self.assertTrue(call("utility_boiler", air_preheater=True, **{**base, **bad})[0], bad)
 
     def test_balance_with_a_boiler(self):
         err, r = call("utilities_balance", steam_duty_kW=10000.0, steam_P_kPa=1000.0, condensate_return_fraction=0.5, boiler_fuel="methane"); self.assertFalse(err, r)
