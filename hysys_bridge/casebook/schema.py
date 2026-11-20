@@ -10,9 +10,11 @@ ATM_KPA = 101.325
 STATUS = {"draft", "reviewed", "built", "verified", "blocked", "unresolved"}
 NEEDS_REVIEW = {"reviewed", "built", "verified"}
 READ = {"full-text", "abstract-only", "snippet-only", "computed"}      # computed: the reference is an independent calculation, not a document
-UNIT_TYPES = {"mixer", "splitter", "pump", "heater", "cooler", "valve", "compressor", "separator", "column", "reactor", "exchanger", "recycle"}
+UNIT_TYPES = {"mixer", "splitter", "pump", "heater", "cooler", "valve", "compressor", "separator", "column", "reactor", "exchanger", "recycle", "conversion_reactor"}
 SPEC_BY_OUTLET = {"heater", "cooler", "pump", "valve", "compressor"}      # units whose outlet stream carries the published specification, so T and P are required there
 KINDS = {"unit_duty": "kJ/h", "stream_T_C": "C", "stream_P_kPa": "kPa", "stream_mass_kg_h": "kg/h", "stream_vapor_fraction": "-", "stream_mass_fraction": "-", "streams_mass_sum_kg_h": "kg/h", "units_duty_sum_kJ_h": "kJ/h"}
+REACTION_PHASES = {"Vapor", "Liquid", "Mixture"}
+THERMAL_MODES = {"isothermal": "Isothermic", "adiabatic": "Adiabatic"}      # case word -> DWSIM ReactorOperationMode (verified 2026-11-21)
 TOP = ("id", "source", "basis", "streams", "units", "reported", "tolerance", "status")
 
 
@@ -29,6 +31,28 @@ def _qty(path, q, units, problems, need_anchor=True):
         problems.append(f"{path}: needs a numeric value"); return
     if q.get("unit") not in units: problems.append(f"{path}: unit {q.get('unit')!r} must be one of {sorted(units)}")
     if need_anchor and not (q.get("anchor") or q.get("assumed")): problems.append(f"{path}: needs an anchor (where in the source) or an assumed reason")
+
+def _reaction_problems(pa, params, basis) -> list[str]:
+    """A conversion reactor carries one reaction: stoichiometry (reactants negative), base compound, conversion in percent, phase, thermal mode.
+    The stoichiometry must conserve mass with the case's own molar masses: a typo in a coefficient is caught before any simulator runs."""
+    p, r = [], params.get("reaction")
+    if not isinstance(r, dict): return [f"{pa}.params.reaction is required on a conversion_reactor"]
+    st, comps, mm = r.get("stoichiometry"), basis.get("compounds", []), basis.get("molar_mass_g_mol", {})
+    if not (isinstance(st, dict) and st and all(isinstance(v, (int, float)) and not isinstance(v, bool) and v != 0 for v in st.values())): return p + [f"{pa}.params.reaction.stoichiometry must be {{compound: nonzero number}}"]
+    if set(st) - set(comps): p.append(f"{pa}.params.reaction.stoichiometry has compounds not in basis.compounds: {sorted(set(st) - set(comps))}")
+    if not (any(v < 0 for v in st.values()) and any(v > 0 for v in st.values())): p.append(f"{pa}.params.reaction needs reactants (negative) and products (positive)")
+    if r.get("base_compound") not in st or st.get(r.get("base_compound"), 0) >= 0: p.append(f"{pa}.params.reaction.base_compound must be a reactant in the stoichiometry")
+    cv = r.get("conversion_pct")
+    if not (isinstance(cv, (int, float)) and not isinstance(cv, bool) and 0 < cv <= 100): p.append(f"{pa}.params.reaction.conversion_pct must be in (0, 100]")
+    if r.get("phase") not in REACTION_PHASES: p.append(f"{pa}.params.reaction.phase must be one of {sorted(REACTION_PHASES)}")
+    if params.get("thermal_mode") not in THERMAL_MODES: p.append(f"{pa}.params.thermal_mode must be one of {sorted(THERMAL_MODES)}")
+    if not (r.get("anchor") or r.get("assumed")): p.append(f"{pa}.params.reaction needs an anchor (where in the source) or an assumed reason")
+    if set(st) <= set(mm):
+        net, scale = sum(v * mm[k] for k, v in st.items()), sum(abs(v) * mm[k] for k, v in st.items())
+        if abs(net) > 1e-3 * scale: p.append(f"{pa}.params.reaction does not conserve mass: net {net:.4f} g per reaction with the case's molar masses")
+    else: p.append(f"{pa}.params.reaction needs basis.molar_mass_g_mol for every compound in it, to check the mass balance")
+    return p
+
 
 
 def validate(case: dict) -> list[str]:
@@ -59,6 +83,9 @@ def validate(case: dict) -> list[str]:
         sr = u.get("params", {}).get("split_ratio")
         if sr is not None and not (u.get("type") == "splitter" and isinstance(sr, (int, float)) and 0 <= sr <= 1): p.append(f"units[{i}].params.split_ratio must be 0..1 and only on a splitter")
         units[u.get("id")] = u
+        if u.get("type") == "conversion_reactor": p += _reaction_problems(f"units[{i}]", u.get("params", {}), case["basis"])
+        elif "reaction" in u.get("params", {}): p.append(f"units[{i}].params.reaction belongs on a conversion_reactor only")
+    if sum(u.get("type") == "conversion_reactor" for u in case["units"]) > 1: p.append("at most one conversion_reactor per case: every reactor would share DWSIM's DefaultSet and so every reaction")
     ids = set()
     for i, s in enumerate(case["streams"]):
         pa = f"streams[{s.get('id', i)}]"
@@ -85,10 +112,10 @@ def validate(case: dict) -> list[str]:
             if set(v) - set(c.get("provenance") or {}): p.append(f"{pa}.composition.provenance must cover every compound")
             if "reconstructed" in (c.get("provenance") or {}).values() and not c.get("check"): p.append(f"{pa}.composition is reconstructed: say in composition.check how it was confirmed")
     for uid, u in units.items():                                # a separator's outlets are connected in file order: port 0 = vapour, port 1 = liquid (verified on the DWSIM Vessel, 2026-11-20)
-        if u.get("type") != "separator": continue
+        if u.get("type") not in ("separator", "conversion_reactor"): continue
         outs = [x for x in case["streams"] if x.get("src") == uid]
         ph = [x.get("phase") for x in outs]
-        if ph != ["vapor", "liquid"]: p.append(f"unit {uid}: a separator needs exactly two outlet streams with phase 'vapor' then 'liquid' in that file order, got {ph}")
+        if ph != ["vapor", "liquid"]: p.append(f"unit {uid}: a separator or conversion reactor needs exactly two outlet streams with phase 'vapor' then 'liquid' in that file order, got {ph}")
     names = set()
     for i, r in enumerate(case["reported"]):
         pa = f"reported[{r.get('name', i)}]"

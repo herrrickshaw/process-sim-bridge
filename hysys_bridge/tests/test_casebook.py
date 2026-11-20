@@ -3,6 +3,7 @@ from unittest import mock
 from hysys_bridge import mcp_server as M
 from hysys_bridge.casebook import schema, runner, ledger, diagnose
 from hysys_bridge.dwsim.fake import FakeDwsim
+from hysys_bridge.dwsim.backend import DwsimBackend
 
 CASE = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "cumene-alkylator-feed-heater.json")
 MIXER = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-mixer-tutorial.json")
@@ -451,6 +452,82 @@ class Fossee(unittest.TestCase):
 
     def test_heater_tolerance_was_fixed_before_the_run(self):
         c = _fossee(FOSSEE[1]); self.assertEqual(c["tolerance"]["pass_rel"], 0.01); self.assertIn("fixed before the run", c["tolerance"]["note"])
+
+
+REACTOR = os.path.join(os.path.dirname(CASE), "ammonia-conversion-reactor-fossee-exp5.json")
+
+
+class ReactorFake(FakeDwsim):
+    """Applies the stoichiometry and conversion that the backend sent to add_conversion: a stand-in for the server's ConversionReactor (plumbing, not thermodynamics)."""
+    MM = {"Nitrogen": 28.0134, "Hydrogen": 2.01588, "Ammonia": 17.03052}
+    def call(self, tool, args):
+        r = super().call(tool, args)
+        if tool != "dwsim_stream_get_results": return r
+        n, feed = args["name"], self.objects["FEED"]
+        if n == "FEED": return {**r, "phases": [{"name": "Mixture", "enthalpy_kJ_kg": 0.0, "compounds": {c: {"mass_fraction": x} for c, x in feed["composition"].items()}}, {"name": "Vapor", "fraction": 1.0}]}
+        mol = {c: feed["composition"][c] / self.MM[c] for c in self.MM}                                  # per kg of feed
+        rx = next(iter(self.reactions.values())); nu = rx["stoichiometry"]; xi = float(rx["conversion"]) / 100 * mol[rx["base_compound"]] / -nu[rx["base_compound"]]
+        out = {c: mol[c] + nu.get(c, 0) * xi for c in mol}; m = {c: out[c] * self.MM[c] for c in out}; tot = sum(m.values())
+        port = self.ports["R"][n][1]
+        if port == 1: return {**r, "mass_flow_kg_s": 0.0, "temperature_K": feed["temperature_K"], "pressure_Pa": feed["pressure_Pa"], "phases": [{"name": "Liquid", "fraction": 0.0}]}
+        return {**r, "mass_flow_kg_s": feed["mass_flow_kg_s"], "temperature_K": feed["temperature_K"], "pressure_Pa": feed["pressure_Pa"],
+                "phases": [{"name": "Mixture", "enthalpy_kJ_kg": 0.0, "compounds": {c: {"mass_fraction": m[c] / tot} for c in m}}, {"name": "Vapor", "fraction": 1.0}]}
+
+
+class ReactorTransport(FakeTransport):
+    duty = -127.495
+    def __init__(self): self.fake = ReactorFake(); self.fake.duty_kW = self.duty
+class WrongDutyTransport(ReactorTransport): duty = -100.0
+
+
+class Reactor(unittest.TestCase):
+    def rc(self): return schema.load(REACTOR)
+    def problems(self, mutate):
+        c = self.rc(); mutate(c); return schema.validate(c)
+    def test_case_validates_and_scenarios_apply(self):
+        c = self.rc(); self.assertEqual(schema.validate(c), [])
+        for sid in ("conversion-50", "conversion-10"): self.assertEqual(schema.validate(schema.apply_scenario(c, sid)), [], sid)
+
+    def test_every_reaction_rule_fires(self):
+        rx = lambda c: c["units"][0]["params"]["reaction"]
+        muts = [("reaction is required", lambda c: c["units"][0]["params"].pop("reaction")),
+                ("conserve mass", lambda c: rx(c)["stoichiometry"].update(Hydrogen=-2)),
+                ("base_compound must be a reactant", lambda c: rx(c).update(base_compound="Ammonia")),
+                ("conversion_pct", lambda c: rx(c).update(conversion_pct=0)),
+                ("conversion_pct", lambda c: rx(c).update(conversion_pct=120)),
+                ("phase must be", lambda c: rx(c).update(phase="Gas")),
+                ("thermal_mode", lambda c: c["units"][0]["params"].pop("thermal_mode")),
+                ("not in basis.compounds", lambda c: rx(c)["stoichiometry"].update(Oxygen=1)),
+                ("needs reactants", lambda c: rx(c).update(stoichiometry={"Nitrogen": 1, "Ammonia": 2})),
+                ("needs an anchor", lambda c: rx(c).pop("anchor")),
+                ("molar_mass_g_mol", lambda c: c["basis"].update(molar_mass_g_mol={})),
+                ("at most one conversion_reactor", lambda c: c["units"].append({"id": "R2", "type": "conversion_reactor", "params": c["units"][0]["params"]})),
+                ("belongs on a conversion_reactor", lambda c: c["units"].append({"id": "H", "type": "heater", "params": {"reaction": {}}}))]
+        for needle, m in muts: self.assertTrue(any(needle in x for x in self.problems(m)), needle)
+
+    def test_backend_adds_reaction_before_reactor_and_sends_thermal_mode(self):
+        t = ReactorTransport(); run = runner.run_case(self.rc(), transport_factory=lambda: t, packages=["Raoult's Law"], scenarios=["base"])
+        calls = [(tool, a) for tool, a in t.fake.calls]; names = [c[0] for c in calls]
+        self.assertLess(names.index("dwsim_reaction_add_conversion"), names.index("dwsim_unitop_add"))
+        add = next(a for tool, a in calls if tool == "dwsim_reaction_add_conversion")
+        self.assertEqual((add["stoichiometry"], add["base_compound"], add["conversion"], add["phase"]), ({"Nitrogen": -1, "Hydrogen": -3, "Ammonia": 2}, "Nitrogen", "20.0", "Vapor"))
+        self.assertEqual(add["name"], "ammonia-formation")
+        setp = next(a for tool, a in calls if tool == "dwsim_unitop_set" and a["name"] == "R")
+        self.assertEqual(setp["properties"]["ReactorOperationMode"], "Isothermic"); self.assertNotIn("DeltaP", setp["properties"])        # the outlet pressure is not specified, so no pressure drop is sent (DWSIM defaults to 0)
+
+    def test_run_matches_the_mole_balance_and_reads_the_duty(self):
+        run = runner.run_case(self.rc(), transport_factory=ReactorTransport, packages=["Raoult's Law"], scenarios=["base"])
+        self.assertTrue(run["paper_package_within_tol"], run["results"][0]["values"])
+        v = run["results"][0]["values"]; self.assertAlmostEqual(v["reactor_duty"]["simulated"], -127.495 * 3600, delta=1)
+        self.assertAlmostEqual(v["vapor_ammonia_mass_fraction"]["simulated"], 0.2, places=3)
+
+    def test_wrong_duty_in_the_explanation_fails_the_case(self):
+        run = runner.run_case(self.rc(), transport_factory=WrongDutyTransport, packages=["Raoult's Law"], scenarios=["base"])
+        self.assertFalse(run["paper_package_within_tol"]); self.assertFalse(run["results"][0]["values"]["reactor_duty"]["within_tol"])
+
+    def test_unreadable_duty_is_an_error_not_a_default(self):
+        be = DwsimBackend(ReactorTransport()); be.fid = "fs-1"; be.t.fake.duty_kW = "unknown"
+        with self.assertRaises(RuntimeError): be.reactor_duty_kJ_h("R")
 
 
 class Ledger(unittest.TestCase):

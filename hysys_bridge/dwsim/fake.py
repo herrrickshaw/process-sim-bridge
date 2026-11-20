@@ -5,14 +5,14 @@ tests/test_dwsim_live.py runs the same backend against the real server."""
 from __future__ import annotations
 from .backend import TOOLS
 
-KNOWN = {"Water", "Ethanol", "Methanol", "Benzene", "Toluene", "Methane", "Propylene", "Propane", "N-butane", "N-pentane", "N-hexane", "N-heptane", "N-octane", "N-decane", "N-dodecane"}  # hydrocarbons verified live 2026-11-20 (Propylene via the cumene heater case)
+KNOWN = {"Nitrogen", "Hydrogen", "Ammonia", "Water", "Ethanol", "Methanol", "Benzene", "Toluene", "Methane", "Propylene", "Propane", "N-butane", "N-pentane", "N-hexane", "N-heptane", "N-octane", "N-decane", "N-dodecane"}  # hydrocarbons verified live 2026-11-20 (Propylene via the cumene heater case)
 PACKAGES = {"Raoult's Law", "Peng-Robinson (PR)", "Soave-Redlich-Kwong (SRK)", "NRTL", "Steam Tables (IAPWS-IF97)"}
 REQ = {"create": set(), "add_compounds": {"flowsheet_id", "names"}, "set_package": {"flowsheet_id", "name"},
        "add_stream": {"flowsheet_id", "name"}, "add_unitop": {"flowsheet_id", "type", "name"}, "unitop_set": {"flowsheet_id", "name", "properties"},
        "connect": {"flowsheet_id", "unitop"}, "dof": {"flowsheet_id"}, "check": {"flowsheet_id"}, "solve": {"flowsheet_id"},
-       "stream_results": {"flowsheet_id", "name"}}
+       "stream_results": {"flowsheet_id", "name"}, "add_conversion": {"flowsheet_id", "name", "stoichiometry", "base_compound"}, "explain": {"flowsheet_id", "object_name"}}
 OPT = {"create": {"name"}, "add_stream": {"temperature_K", "pressure_Pa", "mass_flow_kg_s", "molar_flow_mol_s", "vapor_fraction", "composition"},
-       "connect": {"feed_stream", "feed_port", "product_stream", "product_port"}}
+       "connect": {"feed_stream", "feed_port", "product_stream", "product_port"}, "add_conversion": {"conversion", "phase"}}
 
 
 class FakeDwsim:
@@ -24,6 +24,8 @@ class FakeDwsim:
         self.compounds: list[str] = []
         self.package = None
         self.solved = False
+        self.reactions: dict[str, dict] = {}
+        self.duty_kW = -127.495                                              # what the fake server's explanation says; tests change it
 
     def call(self, tool, args):
         self.calls.append((tool, args))
@@ -41,6 +43,11 @@ class FakeDwsim:
         if n == "set_package":
             if args["name"] not in PACKAGES: raise RuntimeError(f"The given key '{args['name']}' was not present in the dictionary.")
             self.package = args["name"]; return {"property_package": self.package}
+        if n == "add_conversion":
+            if args["name"] in self.reactions: raise RuntimeError("Reaction name must be unique in the flowsheet")
+            if args["base_compound"] not in args["stoichiometry"]: raise RuntimeError("base compound is not in the stoichiometry")
+            self.reactions[args["name"]] = dict(args); return {"name": args["name"], "type": "Conversion", "reaction_set": "DefaultSet"}
+        if n == "explain": return {"object": args["object_name"], "lines": ["## What fixes the extent", f"The reactor operates in the mode \"Isothermic\". The outlet temperature is 25 C and the duty is {self.duty_kW} kW."]}
         if n == "add_stream": self.objects[args["name"]] = {"kind": "stream", **args}; return {"stream": args["name"]}
         if n == "add_unitop": self.objects[args["name"]] = {"kind": "unit", **args}; return {"unitop": args["name"]}
         if n == "unitop_set": self.params.setdefault(args["name"], {}).update(args["properties"]); return {"applied": list(args["properties"])}

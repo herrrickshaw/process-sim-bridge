@@ -15,7 +15,9 @@ def default_transport():
 def _simulated(r, fs, be, cache):
     rs = lambda sid: cache.setdefault(sid, be.read_stream(sid))
     def duty(uid):
-        u = fs.units[uid]; a, b = rs(u.inlets[0]), rs(u.outlets[0])
+        u = fs.units[uid]
+        if u.type == "conversion_reactor": return be.reactor_duty_kJ_h(uid)            # includes the heat of reaction, which stream enthalpies do not
+        a, b = rs(u.inlets[0]), rs(u.outlets[0])
         if a["h_kJ_kg"] is None or b["h_kJ_kg"] is None: raise RuntimeError("DWSIM returned no enthalpy for the unit's streams")
         return (b["h_kJ_kg"] - a["h_kJ_kg"]) * a["mass"]                         # kJ/h from the stream enthalpies (the server has no unit-duty result)
     if r["kind"] == "unit_duty": return duty(r["target"])

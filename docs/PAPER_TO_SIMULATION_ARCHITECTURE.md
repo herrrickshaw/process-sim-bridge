@@ -259,7 +259,9 @@ Source: SASTRA FOSSEE Centre, "Process Simulation Using DWSIM" (Naren, v02, Dece
 | 7 | Simulation of a flash column | built, run | Rachford-Rice with CoolProp vapour pressures |
 | 9 | Determination of heat duty of heater | built, run | CoolProp IAPWS-95 enthalpy difference |
 | 2, 3 | Pure-component properties, binary VLE | not built | property-viewer and Binary Envelope utilities, not flowsheet units |
-| 4, 5, 6 | Equilibrium, conversion, CSTR reactors | not built | the case schema has no reactions yet (see below) |
+| 5 | Material balance on a reactor from conversion data (ammonia) | built, run (section 18) | exact mole balance and the standard heat of formation |
+| 4 | Equilibrium conversion (water-gas shift) | not built | the server's `reaction_add_equilibrium` exists, but the manual gives no equilibrium constant and no independent value is in hand |
+| 6 | CSTR with first-order kinetics | not built | the server has tools for conversion and equilibrium reactions only, no kinetic reaction, and a CSTR needs one |
 | 8 | Shortcut column | not built | server unit exists; reference would be Fenske-Underwood-Gilliland, needs a relative volatility choice |
 | 10 | Heater and cooler as heat exchanger (styrene and toluene) | not built | no independent oracle: styrene is not in CoolProp; the manual links the heater to the cooler's energy stream, which our IR cannot express |
 | 11 | Rigorous shell-and-tube exchanger | not built | needs exchanger geometry parameters; unit not driven |
@@ -276,8 +278,22 @@ All 26 runs solved, no findings, no spec mismatches on read-back. Ledger rows 6,
 ### What the cases needed
 Nothing in the casebook code changed except the test fake (it now knows Raoult's Law and N-pentane). New knowledge about the server: the property package list includes "Raoult's Law" (passed through by name); the compound names are `N-pentane`, `N-hexane`, `N-heptane` (a first run with CoolProp's spelling `n-Pentane` failed loudly with a key error, which is the intended behaviour); 1,621 compounds, styrene present.
 
-### Why the reactor exercises are next, and what they need
-Exercises 4 to 6 would be the first reactor cases and have simple references: Exp 5 is a mole balance (25 kmol/h N2 at 20% conversion leaves 20 N2, 60 H2, 10 NH3, 90 kmol/h in total); Exp 6 is a first-order CSTR (k = 0.005 1/s, V = 2 m3 at 26 m3/h gives tau 276.9 s and conversion k*tau/(1+k*tau) = 0.581). They need a reactions block in the case schema, a reaction-set mapping to `dwsim_reaction_add_conversion` and `dwsim_reactionset_create`, and the ConversionReactor and CSTR unit parameters, none of which are verified. Exp 4 also needs an equilibrium constant that is not in the manual; a correlation would be an assumption to flag.
+### Reactor exercises
+Exp 5 was built next (section 18). Exp 6 has a closed-form reference (k = 0.005 1/s, V = 2 m3 at 26 m3/h gives tau 276.9 s and conversion k*tau/(1+k*tau) = 0.581) but the server has no kinetic reaction tool, so it stays blocked. Exp 4 needs an equilibrium constant that is not in the manual; a correlation would be an assumption to flag.
 
 ### Tests
 `Fossee` class in `test_casebook.py` (5 tests; 47 casebook tests pass): validity and source, mixer reference equals the mole balance, flash reference satisfies the mass and pentane balances, scenarios validate, heater tolerance recorded as fixed before the run. A hand mutant that adds 40 kg/h to the reference vapour flow is caught. Cases stay at `built` (not human-reviewed).
+
+## 18. Phase 1, case 10: conversion reactor, FOSSEE Exp 5 (built and run 2026-11-21)
+
+First reactor in the casebook. Ammonia formation, N2 + 3 H2 -> 2 NH3, 100 kmol/h of 25 mol % N2, 25 C, 1 atm, 20 % conversion of N2, isothermal. Case `ammonia-conversion-reactor-fossee-exp5`; references are an exact mole balance (out: 20 N2, 60 H2, 10 NH3 kmol/h, 90 total) and, for the manual's first self-learning question (heat duty of the reaction), the standard heat of formation of ammonia (-45.9 kJ/mol, three digits), giving -459,000 kJ/h. Scenarios: 50 % and 10 % conversion.
+
+**Result on the real server, 9 runs (3 scenarios x Raoult's Law, Peng-Robinson, SRK): all solved, no findings, no mismatches, every value inside tolerance in every package.** Mass fractions match to 1e-6, the duty to 0.1 % at worst. Ledger 9 rows. Conversion and mole balance do not depend on the package, as expected; the package only enters the duty slightly.
+
+What had to be added:
+- **Schema:** unit type `conversion_reactor` whose `params` carry one `reaction` (stoichiometry with reactants negative, base compound, `conversion_pct`, `phase`, an anchor) and a `thermal_mode` (isothermal or adiabatic). The validator checks that the stoichiometry conserves mass with the case's own molar masses, that the base compound is a reactant, the conversion range, phase and mode, that compounds are in the basis, and allows one reactor per case (all reactors would share DWSIM's DefaultSet). Outlets follow the separator rule: a vapour stream then a liquid stream.
+- **Backend:** `dwsim_reaction_add_conversion` before the reactor is added, `ReactorOperationMode` = `Isothermic` or `Adiabatic` (the server lists Isothermic, Adiabatic, OutletTemperature, NonIsothermalNonAdiabatic, HeatExchange).
+- **Duty:** the stream-enthalpy difference gave 0 (and about -214 kJ/h in the cubic packages) because stream enthalpies do not carry the heat of reaction, so the `unit_duty` kind returned a wrong number rather than failing. For a reactor the duty is now read from the server's `dwsim_explain_result` text ("the duty is X kW"). That is parsing a sentence: if it changes, the read raises instead of defaulting. Found by running, not predicted.
+- **Not verified:** port order was only exercised with an all-vapour product (the vapour stream carried all the mass, the liquid stream none); a reactor with a liquid product has not been run. `adiabatic` mode and pressure drop are mapped but not run live.
+
+Tests: `Reactor` class, 6 tests (53 casebook tests): every reaction rule fires, the reaction is added before the reactor with the exact arguments, a run against a fake reactor reproduces the mole balance, a wrong duty in the explanation fails the case, an unreadable duty raises. A 10-mutant check on the new code: 9 caught; the survivor (reaction name) was a real gap and now has an assertion.
