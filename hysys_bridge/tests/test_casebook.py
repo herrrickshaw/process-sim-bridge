@@ -5,6 +5,7 @@ from hysys_bridge.casebook import schema, runner, ledger, diagnose
 from hysys_bridge.dwsim.fake import FakeDwsim
 
 CASE = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "cumene-alkylator-feed-heater.json")
+LOOP = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-recycle-loop-tutorial.json")
 
 
 def call(tool, **args):
@@ -213,6 +214,69 @@ class Diagnose(unittest.TestCase):
         cl = diagnose.classify([mk("SPEC_MISSING", "warning"), mk("RECYCLE_NO_ESTIMATE", "blocker")])
         self.assertEqual(diagnose.next_step(cl), diagnose.CONVERGENCE[0])                                                      # a blocker beats a warning
         self.assertIsNone(diagnose.next_step([]))
+
+
+class LoopFake(FakeDwsim):
+    """Stand-in that solves the tutorial loop in closed form from the split ratio the backend sent (SR1): fresh 1 kg/s, mixed = fresh / r, recycle = mixed * (1 - r).
+    If the ratio never arrives it answers with 0.5, so a backend that drops the parameter fails the non-base scenarios."""
+    honour = True
+    def call(self, tool, args):
+        r = super().call(tool, args)
+        if tool == "dwsim_stream_get_results":
+            ratio = self.params.get("SP", {}).get("SR1", 0.5) if self.honour else 0.5; k = {"FRESH": 1.0, "PRODUCT": 1.0, "MIXED": 1 / ratio, "HEATED": 1 / ratio, "RECYCLE": (1 - ratio) / ratio, "RETURN": (1 - ratio) / ratio}[args["name"]]
+            r = {**r, "mass_flow_kg_s": k, "phases": []}
+        return r
+
+
+class LoopTransport(FakeTransport):
+    def __init__(self): self.fake = LoopFake()
+
+
+class Recycle(unittest.TestCase):
+    def loop(self): return schema.load(LOOP)
+
+    def test_case_is_valid_and_computed_streams_need_no_t_and_p(self):
+        c = self.loop(); self.assertEqual(schema.validate(c), []); self.assertTrue(schema.capability(c)["buildable"])
+        fs = schema.to_flowsheet(c, "Steam Tables")
+        self.assertIsNone(fs.streams["MIXED"].T_C); self.assertIsNone(fs.streams["MIXED"].P_kPa)
+        self.assertAlmostEqual(fs.streams["HEATED"].T_C, 76.85); self.assertAlmostEqual(fs.streams["HEATED"].P_kPa, 101.325)       # heater outlet carries the spec
+        self.assertEqual(fs.units["SP"].params, {"split_ratio": 0.7}); self.assertEqual(fs.units["RC"].inlets, ["RECYCLE"]); self.assertEqual(fs.units["RC"].outlets, ["RETURN"])
+        self.assertEqual(sorted(fs.units["MIX"].inlets), ["FRESH", "RETURN"])
+
+    def test_the_analytic_values_are_consistent(self):
+        c = self.loop(); r = {x["name"]: x["value"] for x in c["reported"]}
+        self.assertAlmostEqual(r["mixed_flow"], r["product_flow"] / 0.7, places=3); self.assertAlmostEqual(r["recycle_flow"], r["mixed_flow"] * 0.3, places=3)
+        for sc in c["scenarios"]:                                                                                  # each scenario's expectation follows its own ratio
+            q = {x["name"]: x["value"] for x in schema.apply_scenario(c, sc["id"])["reported"]}; ratio = schema.apply_scenario(c, sc["id"])["units"][2]["params"]["split_ratio"]
+            self.assertAlmostEqual(q["mixed_flow"], 3600.0 / ratio, places=3); self.assertAlmostEqual(q["recycle_flow"], q["mixed_flow"] * (1 - ratio), places=3)
+
+    def planted(self, mutate, needle):
+        c = self.loop(); mutate(c); probs = schema.validate(c); self.assertTrue(any(needle in x for x in probs), (needle, probs))
+
+    def test_planted_faults(self):
+        self.planted(lambda c: c["units"][0].update(params={"split_ratio": 0.5}), "split_ratio")                 # on a mixer
+        self.planted(lambda c: c["units"][2]["params"].update(split_ratio=1.5), "split_ratio")
+        self.planted(lambda c: c["scenarios"][0]["overrides"][1].update(reported="nope"), "override path")
+        self.planted(lambda c: c["streams"][2].pop("T"), "streams[HEATED].T")                                      # heater outlet needs T and P
+
+    def test_backend_sends_the_split_ratio_and_adds_a_recycle(self):
+        t = LoopTransport(); run = runner.run_case(self.loop(), lambda: t, packages=["Steam Tables"], scenarios=["base"])
+        sets = [(a["name"], a["properties"]) for tool, a in t.fake.calls if tool == "dwsim_unitop_set"]
+        self.assertIn(("SP", {"OperationMode": "SplitRatios", "SR1": 0.7}), sets)
+        self.assertEqual([a["type"] for tool, a in t.fake.calls if tool == "dwsim_unitop_add"], ["Mixer", "Heater", "Splitter", "Recycle"])
+        self.assertTrue(run["results"][0]["solved"])
+
+    def test_every_scenario_matches_the_closed_form(self):
+        run = runner.run_case(self.loop(), LoopTransport); self.assertEqual(len(run["results"]), 8)
+        self.assertTrue(run["all_within_tol"], [(o["scenario"], {k: v["rel_err"] for k, v in o["values"].items()}) for o in run["results"]])
+
+    def test_a_backend_that_drops_the_ratio_is_caught(self):
+        class Deaf(LoopTransport):
+            def __init__(self): self.fake = LoopFake(); self.fake.honour = False
+        run = runner.run_case(self.loop(), Deaf, packages=["Steam Tables"])
+        within = {o["scenario"]: all(v["within_tol"] for v in o["values"].values()) for o in run["results"]}
+        self.assertFalse(within["base"]); self.assertTrue(within["split-0.5"])                                    # only the scenario that happens to equal the default passes
+        self.assertFalse(run["all_within_tol"])
 
 
 class Ledger(unittest.TestCase):

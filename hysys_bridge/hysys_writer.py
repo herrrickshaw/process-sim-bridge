@@ -55,6 +55,7 @@ def write(fs: Flowsheet, be: Backend, audit_csv: str | None = None) -> list[Row]
     for u in fs.units.values():
         be.add_unit(u.id, u.type)
         be.connect(u.id, u.inlets, u.outlets)
+        if u.params and hasattr(be, "set_unit_params"): be.set_unit_params(u.id, u.params)
     rows: list[Row] = []
     for sid, prop, val in plan_specs(fs):
         be.set(sid, prop, val)

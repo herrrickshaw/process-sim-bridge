@@ -56,7 +56,7 @@ Each pass, in this order, stopping at the first failure and logging what changed
 Allowed levers: fix the case record from its source; fix our backend mapping and add a test; for a recycle, the starting-point ladder (estimate, open-loop solve, ramp, acceleration); change the package only as a listed scenario. Not allowed: changing a published number, loosening a tolerance, or dropping a unit until the result matches. Stop after five changes and record the case as unresolved with the diagnosis.
 
 ## 5. Not yet verified or built
-- Recycle support: the `Recycle` unit type exists on the server, but how to set a tear-stream estimate, tolerance and acceleration through `dwsim_unitop_set` is unknown; to be probed on the real server when the first recycle case (the DWSIM tutorial loop, water, 70/30 split, expected product 1.0, mixed about 1.43 and recycle about 0.43 kg/s) is added. That tutorial gives a free reference case with an analytic answer.
+- Recycle support, partly done (architecture doc section 14): the tutorial loop is a case and passes on the real server, and the server's Recycle properties are known (`AccelerationMethod`, `MaximumIterations`, `SmoothingFactor`; the estimate is the specification on its outlet stream). Still open: the starting-point ladder (the loop converged with no estimate, so it was not needed), acceleration and tolerance in the case schema, and a deliberate non-convergence control (100% recycle).
 - Mass and energy closure checks from `dwsim_explain_result`.
 - A consistency check before the solve for inconsistent specification pairs.
 - The loader error on the 2021 oil and gas file (see section 13 of the architecture doc) is a server problem, outside this table.

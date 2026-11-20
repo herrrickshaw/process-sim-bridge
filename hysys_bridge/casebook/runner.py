@@ -18,7 +18,7 @@ def _simulated(r, fs, be, cache):
         u = fs.units[r["target"]]; a, b = rs(u.inlets[0]), rs(u.outlets[0])
         if a["h_kJ_kg"] is None or b["h_kJ_kg"] is None: raise RuntimeError("DWSIM returned no enthalpy for the unit's streams")
         return (b["h_kJ_kg"] - a["h_kJ_kg"]) * a["mass"]                         # kJ/h from the stream enthalpies (the server has no unit-duty result)
-    return rs(r["target"])["T" if r["kind"] == "stream_T_C" else "P"]
+    return rs(r["target"])[{"stream_T_C": "T", "stream_P_kPa": "P", "stream_mass_kg_h": "mass"}[r["kind"]]]
 
 
 def compare(reported: float, simulated: float, pass_rel: float) -> dict:
@@ -43,14 +43,14 @@ def run_case(case: dict, transport_factory=None, packages: list[str] | None = No
                 solved = be.solve(); found = diagnose.classify(be.last_findings)
                 if not solved: out.append({"scenario": scen, "package": package, "solved": False, "why": be.last_solve, "findings": found, "next_step": diagnose.next_step(found)}); continue
                 cache, vals = {}, {}
-                for r in case["reported"]: vals[r["name"]] = compare(r["value"], _simulated(r, fs, be, cache), case["tolerance"]["pass_rel"])
+                for r in sc_case["reported"]: vals[r["name"]] = compare(r["value"], _simulated(r, fs, be, cache), case["tolerance"]["pass_rel"])
                 out.append({"scenario": scen, "package": package, "solved": True, "values": vals, "spec_mismatches": be.check_solution(), "findings": found})
             finally:
                 t.close()
     spread = {}                                                           # across packages, per scenario and reported value
     for scen in sn:
         sv = [o for o in out if o["scenario"] == scen and o["solved"]]
-        if len(sv) > 1: spread[scen] = {r["name"]: (max(o["values"][r["name"]]["simulated"] for o in sv) - min(o["values"][r["name"]]["simulated"] for o in sv)) / abs(r["value"]) for r in case["reported"] if r["value"]}
+        if len(sv) > 1: spread[scen] = {r["name"]: (max(o["values"][r["name"]]["simulated"] for o in sv) - min(o["values"][r["name"]]["simulated"] for o in sv)) / abs(r["value"]) for r in schema.apply_scenario(case, scen)["reported"] if r["value"]}
     solved = [o for o in out if o["solved"]]
     return {"case": case["id"], "case_hash": schema.case_hash(case), "ran": True, "results": out, "package_spread_rel": spread,
             "all_within_tol": bool(solved) and len(solved) == len(out) and all(v["within_tol"] for o in solved for v in o["values"].values()),

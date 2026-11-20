@@ -10,8 +10,9 @@ ATM_KPA = 101.325
 STATUS = {"draft", "reviewed", "built", "verified", "blocked", "unresolved"}
 NEEDS_REVIEW = {"reviewed", "built", "verified"}
 READ = {"full-text", "abstract-only", "snippet-only"}
-UNIT_TYPES = {"mixer", "splitter", "pump", "heater", "cooler", "valve", "compressor", "separator", "column", "reactor", "exchanger"}
-KINDS = {"unit_duty": "kJ/h", "stream_T_C": "C", "stream_P_kPa": "kPa"}
+UNIT_TYPES = {"mixer", "splitter", "pump", "heater", "cooler", "valve", "compressor", "separator", "column", "reactor", "exchanger", "recycle"}
+SPEC_BY_OUTLET = {"heater", "cooler", "pump", "valve", "compressor"}      # units whose outlet stream carries the published specification, so T and P are required there
+KINDS = {"unit_duty": "kJ/h", "stream_T_C": "C", "stream_P_kPa": "kPa", "stream_mass_kg_h": "kg/h"}
 TOP = ("id", "source", "basis", "streams", "units", "reported", "tolerance", "status")
 
 
@@ -55,6 +56,8 @@ def validate(case: dict) -> list[str]:
     for i, u in enumerate(case["units"]):
         if u.get("type") not in UNIT_TYPES: p.append(f"units[{i}].type {u.get('type')!r} unknown")
         if not u.get("id") or u["id"] in units: p.append(f"units[{i}].id missing or duplicated")
+        sr = u.get("params", {}).get("split_ratio")
+        if sr is not None and not (u.get("type") == "splitter" and isinstance(sr, (int, float)) and 0 <= sr <= 1): p.append(f"units[{i}].params.split_ratio must be 0..1 and only on a splitter")
         units[u.get("id")] = u
     ids = set()
     for i, s in enumerate(case["streams"]):
@@ -67,9 +70,10 @@ def validate(case: dict) -> list[str]:
         if role == "product" and s.get("dst") is not None: p.append(f"{pa}: a product has no dst")
         for e in ("src", "dst"):
             if s.get(e) is not None and s[e] not in units: p.append(f"{pa}.{e} {s[e]!r} is not a unit")
-        _qty(pa + ".T", s.get("T"), {"C"}, p)
+        needs_tp = role == "feed" or units.get(s.get("src"), {}).get("type") in SPEC_BY_OUTLET     # other streams are computed: T and P optional, checked when given
         pr = s.get("P")
-        _qty(pa + ".P", pr, {"bar", "kPa"}, p)
+        if needs_tp or "T" in s: _qty(pa + ".T", s.get("T"), {"C"}, p)
+        if needs_tp or "P" in s: _qty(pa + ".P", pr, {"bar", "kPa"}, p)
         if isinstance(pr, dict) and pr.get("basis") not in ("absolute", "gauge"): p.append(f"{pa}.P.basis must be absolute or gauge (it has caused mismatches before)")
         if role == "feed":
             _qty(pa + ".mass_flow", s.get("mass_flow"), {"kg/h"}, p)
@@ -122,13 +126,15 @@ def _bar_to_kpa(q: dict) -> float:
 
 
 def apply_scenario(case: dict, scenario_id: str) -> dict:
-    """A copy of the case with the scenario's overrides applied. Override: {stream, path: [keys...], set: value}; the result must still validate."""
+    """A copy of the case with the scenario's overrides applied. Override: {stream | unit | reported: id, path: [keys...], set: value}; the result must still validate."""
     if scenario_id == "base": return copy.deepcopy(case)
     sc = next((x for x in case.get("scenarios", []) if x["id"] == scenario_id), None)
     if sc is None: raise KeyError(f"no scenario {scenario_id!r}")
     c = copy.deepcopy(case)
     for o in sc["overrides"]:
-        node = next(x for x in c["streams"] if x["id"] == o["stream"])
+        kind, key, where = (("unit", o["unit"], c["units"]) if "unit" in o else ("reported", o["reported"], c["reported"]) if "reported" in o else ("stream", o["stream"], c["streams"]))
+        node = next((x for x in where if x.get("id", x.get("name")) == key), None)
+        if node is None: raise KeyError(f"no {kind} {key!r} to override")
         for k in o["path"][:-1]: node = node[k]
         if o["path"][-1] not in node: raise KeyError(o["path"][-1])
         node[o["path"][-1]] = o["set"]
@@ -143,7 +149,7 @@ def to_flowsheet(case: dict, package: str) -> Flowsheet:
     fs = Flowsheet(case["id"], package, list(case["basis"]["compounds"]))
     for u in case["units"]: fs.units[u["id"]] = Unit(u["id"], u["type"], dict(u.get("params", {})))
     for s in case["streams"]:
-        st = Stream(s["id"], s["role"], s.get("src"), s.get("dst"), T_C=s["T"]["value"], P_kPa=_bar_to_kpa(s["P"]))
+        st = Stream(s["id"], s["role"], s.get("src"), s.get("dst"), T_C=s["T"]["value"] if "T" in s else None, P_kPa=_bar_to_kpa(s["P"]) if "P" in s else None)
         if s["role"] == "feed":
             st.mass_flow_kg_h = s["mass_flow"]["value"]; v = s["composition"]["values"]
             if case["basis"]["composition_basis"] == "mole":

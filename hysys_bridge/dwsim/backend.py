@@ -23,8 +23,8 @@ TOOLS = {
     "stream_results": "dwsim_stream_get_results",
 }
 DWSIM_TYPE = {"mixer": "Mixer", "splitter": "Splitter", "pump": "Pump", "heater": "Heater", "cooler": "Cooler",
-              "valve": "Valve", "compressor": "Compressor", "separator": "Vessel"}      # names are in dwsim_unitop_add's list
-UNIT_PARAMS_VERIFIED = {"pump", "heater", "cooler", "valve", "compressor", "mixer", "separator", "splitter"}   # splitter: first outlet mass flow -> StreamMassFlowSpec, verified 2026-11-20 (1000 -> 300 + 700 kg/h)
+              "valve": "Valve", "compressor": "Compressor", "separator": "Vessel", "recycle": "Recycle"}      # names are in dwsim_unitop_add's list
+UNIT_PARAMS_VERIFIED = {"pump", "heater", "cooler", "valve", "compressor", "mixer", "separator", "splitter", "recycle"}   # splitter: first outlet mass flow -> StreamMassFlowSpec, verified 2026-11-20 (1000 -> 300 + 700 kg/h)
 PACKAGE = {"Peng-Robinson": "Peng-Robinson (PR)", "SRK": "Soave-Redlich-Kwong (SRK)", "Steam Tables": "Steam Tables (IAPWS-IF97)"}
 KEYMAP = {"T": ("temperature_K", lambda v: v + 273.15, lambda v: v - 273.15),
           "P": ("pressure_Pa", lambda v: v * 1e3, lambda v: v / 1e3),
@@ -97,8 +97,9 @@ class DwsimBackend:
     def add_stream(self, sid): self.streams[sid] = {}
     def add_unit(self, uid, utype):
         if utype not in DWSIM_TYPE: raise KeyError(f"no DWSIM type for {utype}")
-        self.units[uid] = {"type": utype, "inlets": [], "outlets": []}
+        self.units[uid] = {"type": utype, "inlets": [], "outlets": [], "params": {}}
     def connect(self, uid, inlets, outlets): self.units[uid].update(inlets=list(inlets), outlets=list(outlets))
+    def set_unit_params(self, uid, params): self.units[uid]["params"] = dict(params)             # case-level unit specs, e.g. {"split_ratio": 0.7} on a splitter
 
     def set(self, sid, prop, value):
         if prop not in KEYMAP: raise KeyError(f"no DWSIM stream argument for {prop!r} (volume flow is not accepted)")
@@ -119,6 +120,8 @@ class DwsimBackend:
 
     def _unit_params(self, u):
         t, ins, outs = u["type"], u["inlets"], u["outlets"]
+        if t == "splitter" and "split_ratio" in u.get("params", {}):                 # SplitRatios mode; SR1 is the first outlet's share, the rest is the balance (verified 2026-11-20, recycle loop)
+            return {"OperationMode": "SplitRatios", "SR1": float(u["params"]["split_ratio"])}
         if not (ins and outs): return {}
         i, o = self.streams[ins[0]], self.streams[outs[0]]
         p = {}

@@ -1,0 +1,247 @@
+{
+ "id": "water-recycle-loop-tutorial",
+ "source": {
+  "title": "DWSIM Tutorials: Recycle Loops (mixer, heater, splitter and a Recycle block)",
+  "doi": null,
+  "url": "https://dwsim.org/tutorials/en/intermediate/04-recycle-loops.html",
+  "licence": "DWSIM project documentation (licence not checked; facts only)",
+  "use": "facts-only (flowsheet specification and expected values); no text copied",
+  "read": "full-text",
+  "fetch_route": "direct GET via fetch_source.py (no robots restrictions)",
+  "note": "the expected values are the tutorial's rounded results (~1.0, ~1.43, ~0.43 kg/s); the exact values below come from its own mass-balance statement (mixed = fresh / split ratio)"
+ },
+ "basis": {
+  "compounds": [
+   "Water"
+  ],
+  "package_in_paper": "Steam Tables",
+  "packages": [
+   "Steam Tables",
+   "Peng-Robinson"
+  ],
+  "composition_basis": "mole",
+  "molar_mass_g_mol": {
+   "Water": 18.01528
+  },
+  "molar_mass_source": "standard atomic weights",
+  "enthalpy_reference": "not used: only mass flows are compared"
+ },
+ "streams": [
+  {
+   "id": "FRESH",
+   "role": "feed",
+   "src": null,
+   "dst": "MIX",
+   "T": {
+    "value": 26.85,
+    "unit": "C",
+    "anchor": "DWSIM tutorial 'Recycle Loops' (intermediate/04-recycle-loops) key design parameters: 300 K"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "DWSIM tutorial 'Recycle Loops' (intermediate/04-recycle-loops): 1 atm"
+   },
+   "mass_flow": {
+    "value": 3600.0,
+    "unit": "kg/h",
+    "anchor": "DWSIM tutorial 'Recycle Loops' (intermediate/04-recycle-loops): 1.0 kg/s"
+   },
+   "composition": {
+    "values": {
+     "Water": 1.0
+    },
+    "provenance": {
+     "Water": "reported"
+    }
+   }
+  },
+  {
+   "id": "MIXED",
+   "role": "intermediate",
+   "src": "MIX",
+   "dst": "H"
+  },
+  {
+   "id": "HEATED",
+   "role": "intermediate",
+   "src": "H",
+   "dst": "SP",
+   "T": {
+    "value": 76.85,
+    "unit": "C",
+    "anchor": "DWSIM tutorial 'Recycle Loops' (intermediate/04-recycle-loops): heater outlet 350 K"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "DWSIM tutorial 'Recycle Loops' (intermediate/04-recycle-loops): heater pressure drop 0, so 1 atm"
+   }
+  },
+  {
+   "id": "PRODUCT",
+   "role": "product",
+   "src": "SP",
+   "dst": null
+  },
+  {
+   "id": "RECYCLE",
+   "role": "intermediate",
+   "src": "SP",
+   "dst": "RC"
+  },
+  {
+   "id": "RETURN",
+   "role": "intermediate",
+   "src": "RC",
+   "dst": "MIX"
+  }
+ ],
+ "units": [
+  {
+   "id": "MIX",
+   "type": "mixer"
+  },
+  {
+   "id": "H",
+   "type": "heater"
+  },
+  {
+   "id": "SP",
+   "type": "splitter",
+   "params": {
+    "split_ratio": 0.7
+   }
+  },
+  {
+   "id": "RC",
+   "type": "recycle"
+  }
+ ],
+ "reported": [
+  {
+   "name": "product_flow",
+   "kind": "stream_mass_kg_h",
+   "target": "PRODUCT",
+   "value": 3600.0,
+   "unit": "kg/h",
+   "anchor": "DWSIM tutorial 'Recycle Loops' (intermediate/04-recycle-loops) results table: product ~1.0 kg/s (mass conservation)",
+   "precision": "exact by mass balance"
+  },
+  {
+   "name": "mixed_flow",
+   "kind": "stream_mass_kg_h",
+   "target": "MIXED",
+   "value": 5142.857143,
+   "unit": "kg/h",
+   "anchor": "DWSIM tutorial 'Recycle Loops' (intermediate/04-recycle-loops) results table: mixed ~1.43 kg/s; exact 1.0/0.70",
+   "precision": "exact by mass balance"
+  },
+  {
+   "name": "recycle_flow",
+   "kind": "stream_mass_kg_h",
+   "target": "RECYCLE",
+   "value": 1542.857143,
+   "unit": "kg/h",
+   "anchor": "DWSIM tutorial 'Recycle Loops' (intermediate/04-recycle-loops) results table: recycle ~0.43 kg/s; exact 1.43 x 0.30",
+   "precision": "exact by mass balance"
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.005,
+  "note": "analytic reference, so the only error is the recycle's convergence tolerance (0.01% default on the tutorial page); 0.5% allows for the loop not being converged to its last digit"
+ },
+ "scenarios": [
+  {
+   "id": "split-0.5",
+   "why": "the tutorial's own exercise: a 50/50 split; the analytic flows change with the split ratio (mixed = fresh / ratio), so each scenario carries its own expected values",
+   "overrides": [
+    {
+     "unit": "SP",
+     "path": [
+      "params",
+      "split_ratio"
+     ],
+     "set": 0.5
+    },
+    {
+     "reported": "mixed_flow",
+     "path": [
+      "value"
+     ],
+     "set": 7200.0
+    },
+    {
+     "reported": "recycle_flow",
+     "path": [
+      "value"
+     ],
+     "set": 3600.0
+    }
+   ]
+  },
+  {
+   "id": "split-0.9",
+   "why": "a smaller recycle share (10%), where the loop converges quickly",
+   "overrides": [
+    {
+     "unit": "SP",
+     "path": [
+      "params",
+      "split_ratio"
+     ],
+     "set": 0.9
+    },
+    {
+     "reported": "mixed_flow",
+     "path": [
+      "value"
+     ],
+     "set": 4000.0
+    },
+    {
+     "reported": "recycle_flow",
+     "path": [
+      "value"
+     ],
+     "set": 400.0
+    }
+   ]
+  },
+  {
+   "id": "split-0.2",
+   "why": "a large recycle share (80% returned): the tutorial says such a loop can take tens of passes with direct substitution, so this tests convergence, not only arithmetic",
+   "overrides": [
+    {
+     "unit": "SP",
+     "path": [
+      "params",
+      "split_ratio"
+     ],
+     "set": 0.2
+    },
+    {
+     "reported": "mixed_flow",
+     "path": [
+      "value"
+     ],
+     "set": 18000.0
+    },
+    {
+     "reported": "recycle_flow",
+     "path": [
+      "value"
+     ],
+     "set": 14400.0
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "expected values derived from the tutorial's mass-balance statement; closure checked by hand (product = fresh)",
+  "human": false
+ },
+ "status": "built"
+}
