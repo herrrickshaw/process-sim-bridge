@@ -30,6 +30,21 @@ class Steam(unittest.TestCase):
         self.assertTrue(call("steam_demand_for_duty", duty_kW=1.0, steam_P_kPa=1000.0, steam_T_C=100)[0])           # liquid, not steam
         self.assertTrue(call("steam_demand_for_duty", duty_kW=-1.0, steam_P_kPa=1000.0)[0])
 
+    @unittest.skipUnless(HAVE, "needs CoolProp")
+    def test_lost_power_energy_balance_and_limits(self):
+        err, r = call("steam_lost_power", duty_kW=10000.0, extraction_P_kPa=1000.0); self.assertFalse(err, r)
+        self.assertAlmostEqual(r["steam_kg_s"] * r["heat_given_kJ_kg"], 10000.0)
+        self.assertAlmostEqual(r["lost_power_kW"], r["steam_kg_s"] * r["work_still_available_kJ_kg"])
+        self.assertAlmostEqual(r["work_still_available_kJ_kg"], r["extraction"]["h_kJ_kg"] - r["exhaust"]["h_kJ_kg"])
+        self.assertGreater(r["lost_power_per_heat_delivered"], 0); self.assertLess(r["lost_power_per_heat_delivered"], 0.6)
+        err, hi = call("steam_lost_power", duty_kW=10000.0, extraction_P_kPa=3000.0)      # earlier extraction keeps more work in the steam
+        self.assertGreater(hi["work_still_available_kJ_kg"], r["work_still_available_kJ_kg"])
+        e1, e2 = call("steam_lost_power", duty_kW=1.0, extraction_P_kPa=1000.0, eta_s_remaining=1.0)[1], r
+        self.assertGreater(e1["work_still_available_kJ_kg"], e2["work_still_available_kJ_kg"])    # better turbine, more work forgone
+        for bad in (dict(extraction_P_kPa=1.0), dict(extraction_P_kPa=30000.0), dict(extraction_P_kPa=1000.0, eta_s_remaining=1.5)):
+            self.assertTrue(call("steam_lost_power", duty_kW=1.0, **bad)[0])
+        self.assertTrue(call("steam_lost_power", extraction_P_kPa=1000.0)[0])
+
 
 if __name__ == "__main__":
     unittest.main()
