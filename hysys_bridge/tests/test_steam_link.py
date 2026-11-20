@@ -91,6 +91,24 @@ class Steam(unittest.TestCase):
         self.assertAlmostEqual(a["gross_lost_power_kW"], b["gross_lost_power_kW"]); self.assertLess(b["lost_power_kW"], a["lost_power_kW"])
         self.assertTrue(call("steam_lost_power", fwh_extraction_P_kPa=3800.0, condensate_return_T_C=120.0, **rh)[0])     # inside the reheater drop
 
+    @unittest.skipUnless(HAVE, "needs CoolProp")
+    def test_feedwater_cascade_closes_its_heat_balance(self):
+        base = dict(duty_kW=10000.0, extraction_P_kPa=1000.0, condensate_return_T_C=90.0)
+        r = call("steam_lost_power", fwh_heaters=[100.0, 200.0, 400.0, 800.0], **base)[1]; c = r["feedwater_credit"]
+        for rows in (c["heaters_without_return"], c["heaters_with_return"]):
+            hf1 = rows[0]["h_drain"]; tot_duty = sum(x["duty_kW"] for x in rows)
+            self.assertAlmostEqual(sum(x["extraction_kg_s"] * (x["h_steam"] - hf1) for x in rows), tot_duty, delta=1e-6 * tot_duty)   # cascade identity
+            self.assertTrue(all(x["extraction_kg_s"] >= 0 for x in rows))
+        self.assertAlmostEqual(c["credit_kW"], c["power_forgone_without_return_kW"] - c["power_forgone_with_return_kW"])
+        self.assertAlmostEqual(r["lost_power_kW"], r["gross_lost_power_kW"] - c["credit_kW"])
+        # all the returned heat lands in the first heater here (stream stays below its outlet), so credit = displaced steam of heater 1 x its work
+        self.assertGreater(c["credit_kW"], 0); self.assertLess(c["T_in_with_return_C"], 90.0)                      # diluted into the main condensate
+        full = call("steam_lost_power", fwh_heaters=[100.0, 200.0, 400.0, 800.0], condensate_return_fraction=0.5, **base)[1]["feedwater_credit"]["credit_kW"]
+        self.assertAlmostEqual(full, 0.5 * c["credit_kW"], delta=1e-3 * c["credit_kW"])                              # linear while the heater-1 duty absorbs it
+        for bad in (dict(fwh_heaters=[]), dict(fwh_heaters=[1.0]), dict(fwh_heaters=[200.0], fwh_extraction_P_kPa=200.0), dict(fwh_heaters=[200.0], fwh_ttd_K=-200.0)):
+            self.assertTrue(call("steam_lost_power", **{**base, **bad})[0])
+        self.assertTrue(call("steam_lost_power", duty_kW=10000.0, extraction_P_kPa=1000.0, fwh_heaters=[200.0])[0])       # return temperature missing
+
 
 if __name__ == "__main__":
     unittest.main()

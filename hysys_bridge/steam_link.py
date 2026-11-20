@@ -12,6 +12,7 @@ LB_KG = 0.45359237
 BTU_LB_KJ_KG = 2.326
 B11A_MAIN_STEAM_LB_H = 4_120_442            # Exhibit 4-26: boiler outlet 1050 F, 2415 psia, H 1494 Btu/lb
 B11A_MS_T_F, B11A_MS_P_PSIA, B11A_COND_P_PSIA, PSI_KPA = 1050.0, 2415.0, 1.0, 6.894757   # Exhibit 4-26 boiler outlet; HOTWELL 1 psia
+W_COND_LB_H = 3_304_179                                                      # Exhibit 4-26 condensate flow, as in examples/doe_netl_b11a_steam_cycle.py
 B11A_BFW_H, B11A_MS_H = 471.0, 1494.0       # Btu/lb
 B11A_BOILER_MW = B11A_MAIN_STEAM_LB_H * (B11A_MS_H - B11A_BFW_H) * BTU_LB_KJ_KG * LB_KG / 3600 / 1e3   # kW -> MW; ~1,235 MW fluid heat
 
@@ -62,6 +63,34 @@ def expand(P_in_kPa, h_in_kj_kg, P_out_kPa, eta_s):
     h_out = h_in_kj_kg - eta_s * (h_in_kj_kg - h_s)
     q = CP.PropsSI("Q", "P", P_out_kPa * 1e3, "H", h_out * 1e3, "Water")
     return h_out, h_in_kj_kg - h_out, (q if 0 <= q <= 1 else None)
+
+
+def fwh_cascade(line, heaters_kPa, m_c, h_in, ttd_K, P_main_kPa=3000.0):
+    """Closed feedwater heaters with drains cascaded backwards to the condenser.
+    heaters_kPa: extraction pressures; m_c: condensate flow through the train (kg/s); h_in: enthalpy entering the first heater (kJ/kg).
+    Heater i raises the stream to Tsat_i - ttd_K. Heaters whose outlet is below the entering enthalpy do nothing (bypassed); the one straddling it
+    does a partial duty. Extraction flows come from each heater's energy balance, top heater first (its drain heat is handed down).
+    Returns (total power forgone kW, rows). Power forgone by heater i = e_i * (work that steam would still have done, from `line`)."""
+    CP = _cp(); hs = sorted(heaters_kPa); rows = []
+    t_out = [CP.PropsSI("T", "P", p * 1e3, "Q", 1, "Water") - 273.15 - ttd_K for p in hs]
+    if any(b <= a for a, b in zip(t_out, t_out[1:])): raise ValueError("heater outlet temperatures must increase with pressure; check fwh_heaters and fwh_ttd_K")
+    h_out = [steam_enthalpy_kj_kg(P_main_kPa, t) for t in t_out]
+    prev = h_in
+    for i, (P, ho) in enumerate(zip(hs, h_out)):
+        duty = m_c * max(ho - max(prev, h_in), 0.0) if ho > h_in else 0.0
+        prev = max(ho, prev)
+        h_s, _, w, _, _, _ = line(P); h_f = steam_enthalpy_kj_kg(P, x=0.0)
+        rows.append({"P_kPa": P, "T_sat_C": t_out[i] + ttd_K, "T_out_C": t_out[i], "duty_kW": duty, "h_steam": h_s, "h_drain": h_f, "work_kJ_kg": w})
+    D, D_hf = 0.0, 0.0
+    for r in reversed(rows):                                  # top heater first
+        denom = r["h_steam"] - r["h_drain"]
+        if denom <= 0: raise ValueError(f"heater at {r['P_kPa']:g} kPa: steam has no heat above its drain (wet-steam state)")
+        e = (r["duty_kW"] - D * (D_hf - r["h_drain"])) / denom      # heat balance: e*(h_s-h_f) + D*(h_f,above - h_f) = duty
+        r["extraction_kg_s"] = max(e, 0.0)
+        if e < -1e-9: r["warning"] = "drain from above carries more heat than this heater needs; extraction clipped to 0 (energy balance not closed here)"
+        D += r["extraction_kg_s"]; D_hf = r["h_drain"]
+        r["drain_in_kg_s"] = D - r["extraction_kg_s"]
+    return sum(r["extraction_kg_s"] * r["work_kJ_kg"] for r in rows), rows
 
 
 def t_lost_power(a):
@@ -124,6 +153,33 @@ def t_lost_power(a):
     kg_s = kw / dh; gross_kw = kg_s * w_rest; credit_kw = 0.0; credit = None
     warn = []
     cr = [k for k in ("fwh_extraction_P_kPa", "condensate_return_T_C") if k in a]
+    if "fwh_heaters" in a:
+        if "fwh_extraction_P_kPa" in a: raise ValueError("give either fwh_heaters (cascade) or fwh_extraction_P_kPa (single heater), not both")
+        if "condensate_return_T_C" not in a: raise ValueError("the cascade credit needs condensate_return_T_C")
+        hs = [float(x) for x in a["fwh_heaters"]]
+        if not hs: raise ValueError("fwh_heaters is empty")
+        for Pf in hs:
+            if not (Pc < Pf < P0) or (rh and Prh < Pf < Pr): raise ValueError(f"heater pressure {Pf:.4g} kPa must lie on a turbine stage between the condenser and the start state (and not inside the reheater drop)")
+        f = float(a.get("condensate_return_fraction", 1.0)); T_ret = float(a["condensate_return_T_C"])
+        if not (0 <= f <= 1): raise ValueError("condensate_return_fraction must be in [0, 1]")
+        P_ret, T_hw = float(a.get("return_P_kPa", 500.0)), float(a.get("hotwell_T_C", (101.0 - 32) / 1.8))
+        if T_ret >= CP.PropsSI("T", "P", P_ret * 1e3, "Q", 0, "Water") - 273.15 - 1e-9: raise ValueError(f"condensate_return_T_C {T_ret} is not liquid at return_P_kPa {P_ret:g}")
+        m_c = float(a.get("fwh_condensate_kg_s", W_COND_LB_H * LB_KG / 3600)); ttd = float(a.get("fwh_ttd_K", 3.0))
+        if ttd < 0: raise ValueError("fwh_ttd_K must be >= 0")
+        m_r = f * kg_s
+        if m_r >= m_c: raise ValueError("returned condensate exceeds the condensate flow through the heater train (fwh_condensate_kg_s)")
+        h_hw = steam_enthalpy_kj_kg(P_ret, T_hw); h_ret = steam_enthalpy_kj_kg(P_ret, T_ret)
+        if T_hw >= CP.PropsSI("T", "P", hs and sorted(hs)[0] * 1e3, "Q", 1, "Water") - 273.15 - ttd: raise ValueError("hotwell is not colder than the first heater's outlet; check fwh_heaters / fwh_ttd_K")
+        w0, rows0 = fwh_cascade(line, hs, m_c, h_hw, ttd)
+        h_mix = h_hw + (m_r / m_c) * (h_ret - h_hw)                     # return joins the condensate at the hotwell, then runs through the train
+        w1, rows1 = fwh_cascade(line, hs, m_c, h_mix, ttd)
+        credit_kw = w0 - w1
+        credit = {"model": "closed heaters, drains cascaded backwards to the condenser", "fwh_condensate_kg_s": m_c, "ttd_K": ttd, "returned_kg_s": m_r,
+                  "T_in_with_return_C": CP.PropsSI("T", "P", P_ret * 1e3, "H", h_mix * 1e3, "Water") - 273.15, "power_forgone_without_return_kW": w0, "power_forgone_with_return_kW": w1,
+                  "credit_kW": credit_kw, "heaters_without_return": rows0, "heaters_with_return": rows1,
+                  "note": "TTD 3 K, the return/hotwell join and heater pressures are assumptions or your inputs, not read from the report; condensate flow defaults to the report's 3,304,179 lb/h"}
+        if credit_kw < 0: warn.append("negative credit: check inputs")
+        cr = []
     if cr:
         if len(cr) == 1: raise ValueError("the feedwater credit needs both fwh_extraction_P_kPa and condensate_return_T_C; neither is guessed")
         Pf, T_ret = float(a["fwh_extraction_P_kPa"]), float(a["condensate_return_T_C"]); f = float(a.get("condensate_return_fraction", 1.0))
@@ -165,13 +221,14 @@ def _s(props, req): return {"type": "object", "properties": props, "required": r
 TOOLS = {
     "steam_lost_power": (t_lost_power, "Power lost when a heat duty (duty_kW, or a solved refinery session by name) is supplied by steam extracted from the turbine at extraction_P_kPa: "
                                        "expansion line from a start state (default B11A main steam) with isentropic efficiencies (default 0.88, an assumption) to the extraction and then the condenser pressure. "
-                                       "Returns steam flow, lost MW and MW lost per MW of heat delivered. Optional reheat: give reheat_P_kPa (cold reheat) and reheat_T_C (hot reheat) together. Optional feedwater-heating credit: give fwh_extraction_P_kPa (the heater that absorbs returned condensate heat) and condensate_return_T_C together. CoolProp.",
+                                       "Returns steam flow, lost MW and MW lost per MW of heat delivered. Optional reheat: give reheat_P_kPa (cold reheat) and reheat_T_C (hot reheat) together. Optional feedwater-heating credit: condensate_return_T_C plus either fwh_extraction_P_kPa (one heater) or fwh_heaters (list of heater pressures: cascade with drains cascaded back, TTD 3 K assumed). CoolProp.",
                          _s({"duty_kW": {"type": "number"}, "name": {"type": "string"}, "extraction_P_kPa": {"type": "number"}, "start_P_kPa": {"type": "number"},
                              "start_T_C": {"type": "number"}, "condenser_P_kPa": {"type": "number"}, "eta_s_to_extraction": {"type": "number"},
                              "eta_s_remaining": {"type": "number"}, "condensate_T_C": {"type": "number"}, "reheat_P_kPa": {"type": "number"}, "reheat_T_C": {"type": "number"},
                              "reheat_dp_frac": {"type": "number"}, "eta_s_hp": {"type": "number"}, "eta_s_ip_lp": {"type": "number"},
                              "fwh_extraction_P_kPa": {"type": "number"}, "condensate_return_T_C": {"type": "number"}, "condensate_return_fraction": {"type": "number"},
-                             "return_P_kPa": {"type": "number"}, "hotwell_T_C": {"type": "number"}}, ["extraction_P_kPa"])),
+                             "return_P_kPa": {"type": "number"}, "hotwell_T_C": {"type": "number"},
+                             "fwh_heaters": {"type": "array", "items": {"type": "number"}}, "fwh_condensate_kg_s": {"type": "number"}, "fwh_ttd_K": {"type": "number"}}, ["extraction_P_kPa"])),
 "steam_demand_for_duty": (t_demand, "Steam flow needed to deliver a heat duty (duty_kW, or a solved refinery session by name) by condensing steam at steam_P_kPa (abs) "
                                              "to condensate_T_C, with its share of the NETL B11A main-steam flow and boiler heat. CoolProp steam properties; heat balance only.",
                                    _s({"duty_kW": {"type": "number"}, "name": {"type": "string"}, "steam_P_kPa": {"type": "number"}, "steam_T_C": {"type": "number"},
