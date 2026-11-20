@@ -9,10 +9,10 @@ from ..ir import Flowsheet, Stream, Unit
 ATM_KPA = 101.325
 STATUS = {"draft", "reviewed", "built", "verified", "blocked", "unresolved"}
 NEEDS_REVIEW = {"reviewed", "built", "verified"}
-READ = {"full-text", "abstract-only", "snippet-only"}
+READ = {"full-text", "abstract-only", "snippet-only", "computed"}      # computed: the reference is an independent calculation, not a document
 UNIT_TYPES = {"mixer", "splitter", "pump", "heater", "cooler", "valve", "compressor", "separator", "column", "reactor", "exchanger", "recycle"}
 SPEC_BY_OUTLET = {"heater", "cooler", "pump", "valve", "compressor"}      # units whose outlet stream carries the published specification, so T and P are required there
-KINDS = {"unit_duty": "kJ/h", "stream_T_C": "C", "stream_P_kPa": "kPa", "stream_mass_kg_h": "kg/h", "stream_vapor_fraction": "-", "stream_mass_fraction": "-", "streams_mass_sum_kg_h": "kg/h"}
+KINDS = {"unit_duty": "kJ/h", "stream_T_C": "C", "stream_P_kPa": "kPa", "stream_mass_kg_h": "kg/h", "stream_vapor_fraction": "-", "stream_mass_fraction": "-", "streams_mass_sum_kg_h": "kg/h", "units_duty_sum_kJ_h": "kJ/h"}
 TOP = ("id", "source", "basis", "streams", "units", "reported", "tolerance", "status")
 
 
@@ -104,6 +104,8 @@ def validate(case: dict) -> list[str]:
         if "pass_rel" in r and not (isinstance(r["pass_rel"], (int, float)) and 0 < r["pass_rel"] <= 1): p.append(f"{pa}.pass_rel must be in (0, 1]")
         if r["kind"] == "unit_duty":
             if r.get("target") not in units: p.append(f"{pa}.target must be a unit id")
+        elif r["kind"] == "units_duty_sum_kJ_h":
+            if not (isinstance(r.get("targets"), list) and r["targets"] and set(r["targets"]) <= set(units)): p.append(f"{pa}.targets must be a non-empty list of unit ids")
         elif r["kind"] == "streams_mass_sum_kg_h":
             if not (isinstance(r.get("targets"), list) and r["targets"] and set(r["targets"]) <= ids): p.append(f"{pa}.targets must be a non-empty list of stream ids")
         elif r.get("target") not in ids: p.append(f"{pa}.target must be a stream id")

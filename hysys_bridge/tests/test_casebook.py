@@ -7,6 +7,8 @@ from hysys_bridge.dwsim.fake import FakeDwsim
 CASE = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "cumene-alkylator-feed-heater.json")
 MIXER = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-mixer-tutorial.json")
 FLASH = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-ethanol-flash-drum-tutorial.json")
+HEATCOOL = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-heater-cooler-tutorial.json")
+CONDENSER = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "steam-condenser-cooler-independent.json")
 LOOP = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-recycle-loop-tutorial.json")
 
 
@@ -371,6 +373,48 @@ class RangesAndFlash(unittest.TestCase):
         for sid in ("flows-swapped", "equal-flows"):
             fs = schema.to_flowsheet(schema.apply_scenario(m, sid), "SRK"); self.assertEqual(fs.streams["OUTLET"].P_kPa, None)
         self.assertAlmostEqual(schema.to_flowsheet(schema.apply_scenario(m, "flows-swapped"), "SRK").streams["INLET_1"].mass_flow_kg_h, 180000.0)
+
+
+class DutyFake(EnthalpyFake):
+    """Enthalpy h = T kJ/kg (any stream), mass flow of derived streams = the feed's. Heater and cooler duties are then (T_out - T_in) x mass, mirror images of each other."""
+    def call(self, tool, args):
+        r = FakeDwsim.call(self, tool, args)
+        if tool == "dwsim_stream_get_results":
+            kg_s = r["mass_flow_kg_s"] or next(o["mass_flow_kg_s"] for o in self.objects.values() if o.get("mass_flow_kg_s"))
+            r = {**r, "mass_flow_kg_s": kg_s, "phases": [{"name": "Mixture", "enthalpy_kJ_kg": r["temperature_K"] - 273.15, "compounds": {}}, {"name": "Vapor", "fraction": 0.0}]}
+        return r
+
+
+class DutyTransport(FakeTransport):
+    def __init__(self): self.fake = DutyFake()
+
+
+class HeaterCooler(unittest.TestCase):
+    def hc(self): return schema.load(HEATCOOL)
+
+    def test_cases_are_valid_and_independent_values_are_consistent(self):
+        for f in (HEATCOOL, CONDENSER): self.assertEqual(schema.validate(schema.load(f)), [], f)
+        c = self.hc(); r = {x["name"]: x["value"] for x in c["reported"] if "value" in x}
+        self.assertAlmostEqual(r["heater_duty"], -r["cooler_duty"], places=3); self.assertAlmostEqual(r["heater_duty"] / 3600, 230.135, places=2)       # kW, against the tutorial's ~230
+        self.assertEqual(schema.load(CONDENSER)["source"]["read"], "computed")
+        flow2 = {x["name"]: x["value"] for x in schema.apply_scenario(c, "flow-2-kg-s")["reported"] if "value" in x}; self.assertAlmostEqual(flow2["heater_duty"], 2 * r["heater_duty"], delta=1.0)
+        dp = {x["name"]: x for x in schema.apply_scenario(c, "pressure-drop-100kPa")["reported"]}; self.assertAlmostEqual(dp["net_duty"]["range"][0] / dp["net_duty"]["range"][1], 340 / 327, places=3)
+        self.assertAlmostEqual(dp["heater_duty"]["value"] + dp["cooler_duty"]["value"], -333.33, delta=0.1)                                                  # the band is around the independent difference
+
+    def test_duty_sum_kind_is_validated(self):
+        c = self.hc(); c["reported"][2]["targets"] = ["H", "NOPE"]; self.assertTrue(any("targets must be" in x for x in schema.validate(c)))
+
+    def test_duties_and_their_sum_come_from_the_stream_enthalpies(self):
+        run = runner.run_case(self.hc(), DutyTransport, packages=["Steam Tables"], scenarios=["base"]); v = run["results"][0]["values"]
+        self.assertAlmostEqual(v["heater_duty"]["simulated"], 55 * 3600.0); self.assertAlmostEqual(v["cooler_duty"]["simulated"], -55 * 3600.0)             # (80 - 25) K x 3600 kg/h at 1 kJ/kg/K
+        self.assertAlmostEqual(v["net_duty"]["simulated"], 0.0); self.assertTrue(v["net_duty"]["within_tol"])
+        self.assertFalse(v["heater_duty"]["within_tol"])                                                                                                      # not the real water enthalpy, so it must not pass
+
+    def test_heater_pressure_drop_reaches_the_server_with_the_right_sign(self):
+        t = DutyTransport(); runner.run_case(self.hc(), lambda: t, packages=["Steam Tables"], scenarios=["pressure-drop-100kPa"])
+        sets = {a["name"]: a["properties"] for tool, a in t.fake.calls if tool == "dwsim_unitop_set"}
+        self.assertEqual(sets["H"]["CalcMode"], "OutletTemperature"); self.assertAlmostEqual(sets["H"]["OutletTemperature"], 353.15); self.assertAlmostEqual(sets["H"]["DeltaP"], 100000.0)   # a drop is positive
+        self.assertAlmostEqual(sets["C"]["DeltaP"], 0.0)
 
 
 class Ledger(unittest.TestCase):

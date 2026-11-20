@@ -227,3 +227,24 @@ What changed in the casebook for these cases:
 - Mutation check on the new logic: all but one mutant were caught on the first pass; the survivor (compound selection in the mass-fraction reader) exposed that the stand-in carried only one compound, fixed, and the same mutant is now caught.
 
 Status: `separator` (Vessel) and `mixer` are now each backed by published-case runs; both cases stay at status `built` until a person reviews them. Ledger: 9 rows each (hashes ddf8a5109b42 and ddaca6816703).
+
+## 16. Phase 1, cases 5 and 6: heater and cooler (built and run 2026-11-20)
+Page read in full first: DWSIM "Heater and Cooler" tutorial (water, 1 kg/s, 25 C to 80 C and back, Steam Tables, expected "~230 kW"; its hand calculation gives 229.9 kW with Cp 4.18). Because "~230" is rounded, the reference duties are an independent calculation: CoolProp (IAPWS-95) enthalpy difference at the stated pressures, 230.135 kW. Cases: `water-heater-cooler-tutorial` (heater then cooler, scenarios: heat to 95 C, double flow, heat through the boiling point to 110 C, and a 100 kPa pressure drop across the heater) and `steam-condenser-cooler-independent` (a cooler with a phase change, no published case, so its source is marked `computed`: steam at 120 C cooled to 60 C, to 99 C, and only to 105 C). Both cases are checked on outlet temperature, pressure, vapour fraction, each duty, and for the heater-then-cooler loop that the two duties cancel. 24 runs in all, all solved, no findings, every specification read back.
+
+Duty error against the independent value (Steam Tables is the tutorial's package):
+
+| Case and scenario | Steam Tables | Peng-Robinson | SRK |
+|---|---|---|---|
+| Heat 25 to 80 C (and the 95 C, 2 kg/s variants) | -0.032%, -0.027%, -0.032% | +7.9%, +8.0%, +7.9% | +15.1% for all three |
+| Heat through boiling to steam at 110 C | -0.001% | +3.9% | +6.7% |
+| Condense 120 to 60 C | 0.000% | -3.6% | -6.1% |
+| Condense 120 to 99 C | -0.002% | -3.3% | -5.5% |
+| Cool vapour only, 120 to 105 C (a small duty) | +0.063% | +6.3% | +6.2% |
+
+Reading: Steam Tables reproduce the independent duty to a few hundredths of a percent, including through a phase change, so the heater, the cooler and our duty extraction (stream enthalpy difference times mass flow) are correct for them. The two cubic equations of state are 8% and 15% off for liquid water, and 4% to 7% off through a phase change: not a bug in our mapping (the same flowsheet and the same parameters give the exact answer with Steam Tables) but the known weakness the DWSIM documentation names ("for pure water and steam: always Steam Tables"). The default case tolerance (0.5%) therefore fails for those two packages, and the run reports that separately from the paper's own package, which passes.
+
+Two things found along the way:
+- **My own scenario was wrong.** In the pressure-drop scenario the heater (301 to 201 kPa) and the cooler (201 kPa) no longer follow the same path, so the net duty is not zero but the difference of the two independent values, -333.3 kJ/h; my first run flagged it (Steam Tables gave -333.37). The expectation was corrected from the independent calculation, which was available before the run, not from the simulator output; the scenario now carries a 2% band around -333.3 and says why.
+- **The sign of the heater's pressure-drop parameter** (a drop is sent as a positive `DeltaP`) is now covered by a test and a mutant that flips it is caught. The live pressure-drop runs match the independent duties with Steam Tables to -0.032%, the same as without a drop.
+
+Casebook changes: reference kind `units_duty_sum_kJ_h` (net duty over several units); source `read: computed` for a reference that is a calculation, not a document. Mutation check: 5 of 5 new mutants and all 46 validator rules caught. Ledger: 15 and 9 rows (hashes 10ff22c8381c and 429e5cc26ffe). Both cases stay at `built` until a person reviews them.

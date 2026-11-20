@@ -14,10 +14,12 @@ def default_transport():
 
 def _simulated(r, fs, be, cache):
     rs = lambda sid: cache.setdefault(sid, be.read_stream(sid))
-    if r["kind"] == "unit_duty":
-        u = fs.units[r["target"]]; a, b = rs(u.inlets[0]), rs(u.outlets[0])
+    def duty(uid):
+        u = fs.units[uid]; a, b = rs(u.inlets[0]), rs(u.outlets[0])
         if a["h_kJ_kg"] is None or b["h_kJ_kg"] is None: raise RuntimeError("DWSIM returned no enthalpy for the unit's streams")
         return (b["h_kJ_kg"] - a["h_kJ_kg"]) * a["mass"]                         # kJ/h from the stream enthalpies (the server has no unit-duty result)
+    if r["kind"] == "unit_duty": return duty(r["target"])
+    if r["kind"] == "units_duty_sum_kJ_h": return sum(duty(u) for u in r["targets"])
     if r["kind"] == "streams_mass_sum_kg_h": return sum(rs(t)["mass"] for t in r["targets"])
     if r["kind"] == "stream_mass_fraction":
         mf = rs(r["target"])["mass_fractions"]

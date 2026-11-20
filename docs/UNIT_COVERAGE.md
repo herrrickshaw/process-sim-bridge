@@ -18,7 +18,7 @@ Status key: **verified** = built through our casebook or tool path and run on th
 | Component separator | Sep (secondary) | Component Splitter | ComponentSeparator | none | server has it | none yet |
 | Flash, two phase | Flash2 (official) | Separator | Vessel | separator | **verified** against the flash drum tutorial (NRTL matches its values; PR and SRK differ as expected for a polar mixture); port 0 = vapour, port 1 = liquid | done |
 | Flash, three phase | Flash3, Decanter (official) | 3-Phase Separator | Vessel (phase settings unknown) | none | not driven | none |
-| Heater, cooler | Heater (official) | Heater, Cooler | Heater, Cooler | heater, cooler | verified (cumene heater, recycle loop) | done |
+| Heater, cooler | Heater (official) | Heater, Cooler | Heater, Cooler | heater, cooler | **verified** with an independent CoolProp oracle through a phase change: Steam Tables within 0.07%, cubic EOS 4 to 15% off for water (cumene heater and recycle loop earlier) | done |
 | Heat exchanger | HeatX (official), MHeatX | Heat Exchanger | HeatExchanger | exchanger (in schema, not mapped) | server has it; not driven | DWSIM Heat Exchanger Design (not read) |
 | Pump | Pump (secondary) | Pump | Pump | pump | verified parameter mapping; no published duty case yet | cumene pumps (needs table matching) |
 | Compressor | Compr, MCompr (secondary) | Compressor | Compressor | compressor | parameter mapping verified; no published case | oil and gas plant (blocked, see architecture doc section 13), CCGT |
@@ -47,7 +47,7 @@ Status key: **verified** = built through our casebook or tool path and run on th
 
 ## 4. Suggested order for the next cases (each is one slice with its own reference)
 1. ~~Simple flash drum and mixer~~ done (architecture doc section 15).
-2. Heater and cooler duties from the same tutorial set; then heat exchanger design.
+2. ~~Heater and cooler duties~~ done (architecture doc section 16); next heat exchanger design.
 3. Refrigeration cycle (compressor, valve, evaporator, condenser): first loop with a compressor and valve and a published coefficient of performance.
 4. Conversion reactor, then ammonia or methanol synthesis (reactor plus recycle plus purge).
 5. Shortcut distillation, then the benzene/toluene column if feed-stage assignment is solved.
