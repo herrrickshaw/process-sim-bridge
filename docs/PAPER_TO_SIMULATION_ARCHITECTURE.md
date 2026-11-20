@@ -129,7 +129,7 @@ Principles: a rule is only real if a planted fault breaks it; a check needs a po
 
 | Layer | What | Where | Status |
 |---|---|---|---|
-| Unit, validator | One failing fixture per validation rule (15 planted faults: missing anchor, missing pressure basis, composition not summing to 1, reconstructed without check, verified without human review, bad targets, empty reported, missing licence, missing molar masses, scenario without a reason, bad override path, bad scenario composition, tolerance 0, bad reproduce block, unknown compound) | `hysys_bridge/tests/test_casebook.py` | Done |
+| Unit, validator | One failing fixture per validation rule (about 40 planted faults, each reported exactly once; first version had 15 and only covered 14 of 36 rules, see the test audit below). Examples: missing anchor, missing pressure basis, composition not summing to 1, reconstructed without check, verified without human review, bad targets, empty reported, missing licence, missing molar masses, scenario without a reason, bad override path, bad scenario composition, tolerance 0, bad reproduce block, unknown compound) | `hysys_bridge/tests/test_casebook.py` | Done |
 | Unit, conversion and compare | gauge to absolute, mass fractions sum to 1, scenario changes only its override and leaves the base untouched, tolerance edges, zero reference | same | Done |
 | Integration, fake transport | Runner over all scenarios and packages with a deterministic stand-in that returns an invented enthalpy; asserts the arithmetic and that a wrong answer is reported as outside tolerance (negative control) | same | Done; catches plumbing errors only, not thermodynamics |
 | Tool layer | Registration, path-traversal refusal, `DWSIM_MCP_CMD` required, ledger written only with `confirm=true` | same | Done |
@@ -153,3 +153,16 @@ What this plan already does the same way: spec-first case records, one slice at 
 | Spec before code, small atomic tasks | agent-skills `/spec`, `/plan` | Each new case gets its record written and validated before any run; each extraction is one paper, one commit |
 | Independent review before merge | both | Have the casebook reviewed by a second reader, human or separate agent given the code, not my conclusions, before PR #1 is merged |
 | Search before building | gstack ETHOS | Before the Phase 2 extractor, look at what the surveyed studies (ChemE-as-Code, Aspen Assist) already do for provenance and acceptance criteria |
+
+## 12. Test audit of the casebook tests (2026-11-20, before Phase 1)
+Method: mutation check, not line coverage. Each validation rule (36 `append` lines in `schema.py`) was switched off in turn and the casebook tests re-run; then 11 hand-written mutants of the runner, converter, ledger and tools (flipped enthalpy difference, dropped gauge-to-absolute conversion, dropped mole-to-mass conversion, ledger opened for write instead of append, ignored `confirm`, loosened case-id rule, ignored scenario override, and others). A mutant that leaves the tests green points at a test that does not protect that behaviour. Line coverage was misleading here: it showed every rule line as run because each rule is one `if ...: append` line.
+
+Findings and fixes:
+- **22 of 36 validation rules had no failing test** (the earlier claim of one fixture per rule was wrong). Added 22 planted-fault fixtures; mutation survivors are now 0 of 36.
+- **A single base fault was reported three times** (once for the base case and once per scenario). Scenario validation now reports only the problems a scenario adds. Planted-fault tests now assert the exact count, so a rule that fires for the wrong reason or twice fails.
+- **Path-traversal test was vacuous**: it passed because the file did not exist, not because the id rule worked (mutant with the rule removed survived). It now plants a real case file one directory up and requires the id-rule message.
+- **Reproduce check** only had exact-match cases, so a broken tolerance survived. Added a case 0.5% off (matches) and 2% off (does not).
+- **Package spread** was never asserted, and it was computed across scenarios until a mutant showed the tests could not tell. Added a stand-in transport whose enthalpy depends on the package and checked the spread per scenario against the closed form.
+- **Environment leak**: two tests removed `DWSIM_MCP_CMD` from the process environment for the rest of the run. They now restore it. The same pattern exists in `test_refinery_link.py` and `test_safety_link.py` (not changed here).
+
+Result: 17 casebook tests, 47 of 47 mutants caught. Not covered by this audit: the real-server path (`StdioTransport`) and `stream_T_C`/`stream_P_kPa` extractors, which only the live gate exercises.

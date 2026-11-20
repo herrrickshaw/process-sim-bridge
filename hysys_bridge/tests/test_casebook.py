@@ -1,4 +1,5 @@
-import copy, json, os, tempfile, unittest
+import copy, json, os, shutil, tempfile, unittest
+from unittest import mock
 from hysys_bridge import mcp_server as M
 from hysys_bridge.casebook import schema, runner, ledger
 from hysys_bridge.dwsim.fake import FakeDwsim
@@ -34,9 +35,10 @@ class Schema(unittest.TestCase):
     def test_the_real_case_is_valid_and_buildable(self):
         c = case(); self.assertEqual(schema.validate(c), []); self.assertTrue(schema.capability(c)["buildable"])
 
-    def planted(self, mutate, needle):
+    def planted(self, mutate, needle, n=1):
         c = case(); mutate(c); probs = schema.validate(c)
         self.assertTrue(any(needle in x for x in probs), (needle, probs))
+        self.assertEqual(len(probs), n, probs)                       # the fault is reported once, not once per scenario, and nothing else breaks
 
     def test_each_planted_fault_is_caught(self):
         feed = lambda c: c["streams"][0]
@@ -44,7 +46,7 @@ class Schema(unittest.TestCase):
         self.planted(lambda c: feed(c)["P"].pop("basis"), "P.basis")
         self.planted(lambda c: feed(c)["composition"]["values"].update(Benzene=0.5), "sums to")
         self.planted(lambda c: feed(c)["composition"].pop("check"), "reconstructed")
-        self.planted(lambda c: feed(c)["composition"]["values"].update(Xenon=0.0), "not in basis.compounds")
+        self.planted(lambda c: feed(c)["composition"]["values"].update(Xenon=0.0), "not in basis.compounds", n=2)             # also lacks a provenance entry
         self.planted(lambda c: c.update(status="verified"), "review.human")
         self.planted(lambda c: c["reported"][0].update(target="NOPE"), "target")
         self.planted(lambda c: c["reported"].clear(), "reported is empty")
@@ -55,6 +57,32 @@ class Schema(unittest.TestCase):
         self.planted(lambda c: c["scenarios"][0]["overrides"][0].update(set={"Propylene": 0.5, "Benzene": 0.2}), "sums to")
         self.planted(lambda c: c["tolerance"].update(pass_rel=0), "pass_rel")
         self.planted(lambda c: c.update(reproduce={"expected": {"Bogus": 1}, "rel_tol": 0.1, "source": "x"}), "reproduce")
+
+    def test_structural_faults(self):
+        feed = lambda c: c["streams"][0]
+        self.planted(lambda c: c.pop("units"), "missing 'units'")
+        self.planted(lambda c: c["source"].pop("url"), "doi or a url")
+        self.planted(lambda c: c["source"].update(read="skimmed"), "source.read")
+        self.planted(lambda c: c["basis"].update(packages=[]), "basis.packages", n=2)                                   # also breaks the reproduce check
+        self.planted(lambda c: c.update(status="finished"), "status must be")
+        self.planted(lambda c: c.pop("review"), "review.method")
+        self.planted(lambda c: c["units"][0].update(type="teleporter"), "unknown")
+        self.planted(lambda c: c["units"].append(dict(c["units"][0])), "duplicated")
+        self.planted(lambda c: c["streams"].append(dict(c["streams"][1])), "duplicated")
+        self.planted(lambda c: c["streams"][1].update(role="heap"), "role must be")
+        self.planted(lambda c: feed(c).update(src="HE100"), "a feed has no src")
+        self.planted(lambda c: c["streams"][1].update(dst="HE100"), "a product has no dst")
+        self.planted(lambda c: c["streams"][1].update(src="HE999"), "is not a unit")
+        self.planted(lambda c: feed(c)["T"].update(value="hot"), "numeric value")
+        self.planted(lambda c: feed(c)["T"].update(unit="F"), "unit 'F'")
+        self.planted(lambda c: feed(c)["composition"]["provenance"].update(Benzene="guessed"), "must be reported, assumed or reconstructed")
+        self.planted(lambda c: feed(c)["composition"]["provenance"].pop("Benzene"), "must cover every compound")
+        self.planted(lambda c: c["reported"].append(dict(c["reported"][0])), "duplicated")
+        self.planted(lambda c: c["reported"][0].update(kind="duty"), "kind must be")
+        self.planted(lambda c: c["reported"].append({**c["reported"][0], "name": "t_out", "kind": "stream_T_C", "unit": "C", "target": "HE100"}), "must be a stream id")
+        self.planted(lambda c: c["scenarios"].append(dict(c["scenarios"][0])), "id missing, duplicated or 'base'", n=1)
+        self.planted(lambda c: c["scenarios"][0].update(id="base"), "id missing, duplicated or 'base'")
+        self.planted(lambda c: c["scenarios"][0].update(overrides=[]), "overrides is empty")
 
     def test_flowsheet_conversion(self):
         fs = schema.to_flowsheet(case(), "SRK")
@@ -94,13 +122,37 @@ class Runner(unittest.TestCase):
         c2 = copy.deepcopy(c); c2["reproduce"]["expected"] = {"NRTL": sim, "Peng-Robinson": sim, "SRK": sim}
         self.assertEqual(runner.reproduce(c2, run)["matched"], 3)
 
+    def test_reproduce_uses_the_tolerance(self):
+        c = case(); run = runner.run_case(c, FakeTransport, scenarios=["base"]); sim = run["results"][0]["values"]["heater_duty"]["simulated"]
+        c["reproduce"]["rel_tol"] = 0.01
+        c["reproduce"]["expected"] = {"NRTL": sim * 1.005, "Peng-Robinson": sim * 1.02, "SRK": sim * 0.995}
+        self.assertEqual(runner.reproduce(c, run)["matched"], 2)                                                  # within 1%: NRTL and SRK; 2% off: not Peng-Robinson
+
+    def test_package_spread_is_per_scenario(self):
+        slope = {"NRTL": 1.0, "Peng-Robinson (PR)": 1.1, "Soave-Redlich-Kwong (SRK)": 1.05}          # the fake records the server's full package names
+        class PkgFake(EnthalpyFake):
+            def call(self, tool, args):
+                r = FakeDwsim.call(self, tool, args)
+                if tool == "dwsim_stream_get_results":
+                    kg_s = r["mass_flow_kg_s"] or self.objects["TO_HEATER"]["mass_flow_kg_s"]; r["mass_flow_kg_s"] = kg_s
+                    r["phases"] = [{"name": "Mixture", "enthalpy_kJ_kg": slope[self.package] * (r["temperature_K"] - 273.15), "compounds": {}}, {"name": "Vapor", "fraction": 0.0}]
+                return r
+        class T(FakeTransport):
+            def __init__(self): self.fake = PkgFake()
+        c = case(); run = runner.run_case(c, T); dT = 170.0 - 72.429121
+        want = lambda m: 0.1 * dT * m / 210583600.9                                                                # (1.1 - 1.0) * dT * mass / reported
+        sp = run["package_spread_rel"]; m_mole = c["scenarios"][1]["overrides"][0]["set"]["value"]
+        self.assertAlmostEqual(sp["base"]["heater_duty"], want(1071616.0), places=9)
+        self.assertAlmostEqual(sp["mass-from-mole-flow"]["heater_duty"], want(m_mole), places=9)                  # pooled across scenarios it would be larger
+
     def test_unknown_package_or_scenario_refused(self):
         with self.assertRaises(ValueError): runner.run_case(case(), FakeTransport, packages=["Bogus"])
         with self.assertRaises(ValueError): runner.run_case(case(), FakeTransport, scenarios=["Bogus"])
 
     def test_no_dwsim_command_is_a_clear_error(self):
-        os.environ.pop("DWSIM_MCP_CMD", None)
-        with self.assertRaises(RuntimeError) as e: runner.default_transport()
+        with mock.patch.dict(os.environ): 
+            os.environ.pop("DWSIM_MCP_CMD", None)
+            with self.assertRaises(RuntimeError) as e: runner.default_transport()
         self.assertIn("DWSIM_MCP_CMD", str(e.exception))
 
 
@@ -124,9 +176,13 @@ class Tools(unittest.TestCase):
         err, r = call("casebook_list"); self.assertFalse(err); self.assertIn("cumene-alkylator-feed-heater", [x["id"] for x in r["cases"]])
         err, r = call("casebook_validate", case_id="cumene-alkylator-feed-heater"); self.assertFalse(err); self.assertTrue(r["valid"])
         for bad in ("../etc/passwd", "Cumene", "a b"):
-            self.assertTrue(call("casebook_validate", case_id=bad)[0], bad)                                       # no path traversal
-        os.environ.pop("DWSIM_MCP_CMD", None)
-        err, msg = call("casebook_run", case_id="cumene-alkylator-feed-heater"); self.assertTrue(err); self.assertIn("DWSIM_MCP_CMD", msg)
+            err, msg = call("casebook_validate", case_id=bad); self.assertTrue(err, bad); self.assertIn("case_id must be", msg)      # refused by the id rule, not merely "file not found"
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"CASEBOOK_DIR": os.path.join(d, "cases")}):
+            os.makedirs(os.path.join(d, "cases")); shutil.copy(CASE, os.path.join(d, "secret.json"))          # a real case file one level above the case directory
+            err, msg = call("casebook_validate", case_id="../secret"); self.assertTrue(err); self.assertIn("case_id must be", msg)
+        with mock.patch.dict(os.environ):
+            os.environ.pop("DWSIM_MCP_CMD", None)
+            err, msg = call("casebook_run", case_id="cumene-alkylator-feed-heater"); self.assertTrue(err); self.assertIn("DWSIM_MCP_CMD", msg)
 
     def test_run_writes_the_ledger_only_with_confirm(self):
         with tempfile.TemporaryDirectory() as d:

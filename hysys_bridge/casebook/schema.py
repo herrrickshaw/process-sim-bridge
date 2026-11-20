@@ -90,6 +90,7 @@ def validate(case: dict) -> list[str]:
         if r["kind"] == "unit_duty" and r.get("target") not in units: p.append(f"{pa}.target must be a unit id")
         if r["kind"] != "unit_duty" and r.get("target") not in ids: p.append(f"{pa}.target must be a stream id")
     if not case["reported"]: p.append("reported is empty: a case without a published result to compare against is not a reference case")
+    base_problems = validate({**case, "scenarios": [], "reproduce": None}) if case.get("scenarios") else []   # a scenario reports only the problems it adds, not the base case's again
     ssc = set()
     for i, sc in enumerate(case.get("scenarios", [])):
         pa = f"scenarios[{sc.get('id', i)}]"
@@ -98,7 +99,7 @@ def validate(case: dict) -> list[str]:
         if not sc.get("why"): p.append(f"{pa}.why is required: a scenario varies something inside a stated uncertainty, not to fit the answer")
         if not sc.get("overrides"): p.append(f"{pa}.overrides is empty")
         else:
-            try: sub = apply_scenario(case, sc["id"], _check=False); p += [f"{pa}: {x}" for x in validate({**sub, "scenarios": []})]
+            try: sub = apply_scenario(case, sc["id"]); p += [f"{pa}: {x}" for x in validate({**sub, "scenarios": [], "reproduce": None}) if x not in base_problems]
             except (KeyError, IndexError, TypeError) as e: p.append(f"{pa}: an override path does not exist ({e!r})")
     rp = case.get("reproduce")
     if rp is not None and not (isinstance(rp.get("expected"), dict) and set(rp["expected"]) <= set(b.get("packages", [])) and isinstance(rp.get("rel_tol"), (int, float)) and rp.get("source")):
@@ -120,7 +121,7 @@ def _bar_to_kpa(q: dict) -> float:
     return v + ATM_KPA if q.get("basis") == "gauge" else v
 
 
-def apply_scenario(case: dict, scenario_id: str, _check: bool = True) -> dict:
+def apply_scenario(case: dict, scenario_id: str) -> dict:
     """A copy of the case with the scenario's overrides applied. Override: {stream, path: [keys...], set: value}; the result must still validate."""
     if scenario_id == "base": return copy.deepcopy(case)
     sc = next((x for x in case.get("scenarios", []) if x["id"] == scenario_id), None)
