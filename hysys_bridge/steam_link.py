@@ -66,17 +66,48 @@ def expand(P_in_kPa, h_in_kj_kg, P_out_kPa, eta_s):
 
 def t_lost_power(a):
     """Power lost when steam is taken from the turbine at extraction_P_kPa instead of expanding to the condenser.
-    Expansion line: start state -> extraction pressure (eta_s_to_extraction) -> condenser pressure (eta_s_remaining). The extracted steam
-    gives its heat in the process and returns as condensate, so what is lost is the work it would still have done: m*(h_ext - h_exhaust)."""
+    Without reheat: start -> extraction (eta_s_to_extraction) -> condenser (eta_s_remaining). The extracted steam gives its heat in the
+    process and returns as condensate, so what is lost is the work it would still have done.
+    With reheat (reheat_P_kPa = cold-reheat pressure, reheat_T_C = hot-reheat temperature, both required together): HP section start ->
+    cold reheat (eta_s_hp), reheater (pressure drop reheat_dp_frac, an assumption) , IP/LP section -> condenser (eta_s_ip_lp). Steam taken at or above the
+    cold-reheat pressure also forgoes its reheat: lost power = remaining HP work + the whole IP/LP work; the boiler heat saved by skipping the
+    reheater is reported separately (it is fuel, not power)."""
     CP = _cp()
     P0 = float(a.get("start_P_kPa", B11A_MS_P_PSIA * PSI_KPA)); T0 = float(a.get("start_T_C", (B11A_MS_T_F - 32) / 1.8))
     Pc = float(a.get("condenser_P_kPa", B11A_COND_P_PSIA * PSI_KPA)); Pe = float(a["extraction_P_kPa"])
-    e1, e2 = float(a.get("eta_s_to_extraction", 0.88)), float(a.get("eta_s_remaining", 0.88))
-    if not (Pc < Pe < P0): raise ValueError(f"need condenser P ({Pc:.3g}) < extraction P ({Pe:.4g}) < start P ({P0:.5g}) kPa")
-    if not (0 < e1 <= 1 and 0 < e2 <= 1): raise ValueError("isentropic efficiencies must be in (0, 1]")
+    rh = "reheat_P_kPa" in a or "reheat_T_C" in a
+    if rh and not ("reheat_P_kPa" in a and "reheat_T_C" in a): raise ValueError("reheat needs both reheat_P_kPa (cold reheat) and reheat_T_C (hot reheat); neither is guessed")
+    if rh:
+        e1 = e2 = None; ehp, eil = float(a.get("eta_s_hp", 0.88)), float(a.get("eta_s_ip_lp", 0.88))
+        Pr, Trh, dpf = float(a["reheat_P_kPa"]), float(a["reheat_T_C"]), float(a.get("reheat_dp_frac", 0.10))
+        Prh = Pr * (1 - dpf)
+        if not (Pc < Prh < Pr < P0): raise ValueError(f"need condenser P < hot-reheat P ({Prh:.4g}) < cold-reheat P ({Pr:.4g}) < start P ({P0:.5g}) kPa")
+        if not (Pc < Pe < P0): raise ValueError(f"extraction P must lie between condenser ({Pc:.3g}) and start ({P0:.5g}) kPa")
+        if Prh < Pe < Pr: raise ValueError(f"extraction P is inside the reheater pressure drop ({Prh:.4g}-{Pr:.4g} kPa): no turbine stage is there")
+        effs = (ehp, eil)
+    else:
+        e1, e2 = float(a.get("eta_s_to_extraction", 0.88)), float(a.get("eta_s_remaining", 0.88)); effs = (e1, e2)
+        if not (Pc < Pe < P0): raise ValueError(f"need condenser P ({Pc:.3g}) < extraction P ({Pe:.4g}) < start P ({P0:.5g}) kPa")
+    if not all(0 < e <= 1 for e in effs): raise ValueError("isentropic efficiencies must be in (0, 1]")
     h0 = CP.PropsSI("H", "P", P0 * 1e3, "T", T0 + 273.15, "Water") / 1e3
-    h_ext, w_to_ext, q_ext = expand(P0, h0, Pe, e1)
-    h_exh, w_rest, q_exh = expand(Pe, h_ext, Pc, e2)
+    reheat_info = None; extra_heat_saved = 0.0
+    if not rh:
+        h_ext, w_to_ext, q_ext = expand(P0, h0, Pe, e1)
+        h_exh, w_rest, q_exh = expand(Pe, h_ext, Pc, e2)
+    else:
+        h_crh, w_hp, _ = expand(P0, h0, Pr, ehp)
+        h_hrh = CP.PropsSI("H", "P", Prh * 1e3, "T", Trh + 273.15, "Water") / 1e3
+        h_exh_full, w_il, q_exh = expand(Prh, h_hrh, Pc, eil)
+        reheat_info = {"cold_reheat": {"P_kPa": Pr, "h_kJ_kg": h_crh}, "hot_reheat": {"P_kPa": Prh, "T_C": Trh, "h_kJ_kg": h_hrh}, "reheater_heat_kJ_kg": h_hrh - h_crh,
+                       "hp_work_kJ_kg": w_hp, "ip_lp_work_kJ_kg": w_il}
+        if Pe >= Pr:                                          # taken from the HP section / cold reheat: forgoes reheat too
+            h_ext, w_to_ext, q_ext = expand(P0, h0, Pe, ehp)
+            h_after_hp, w_hp_rest, _ = expand(Pe, h_ext, Pr, ehp)
+            w_rest = w_hp_rest + w_il; h_exh = h_exh_full; extra_heat_saved = h_hrh - h_after_hp          # segment-wise efficiencies: the chain through the extraction point
+            reheat_info["cold_reheat_via_extraction_h_kJ_kg"] = h_after_hp
+        else:                                                 # taken from the IP/LP section
+            h_ext, w_a, q_ext = expand(Prh, h_hrh, Pe, eil); w_to_ext = w_hp + w_a
+            h_exh, w_rest, q_exh = expand(Pe, h_ext, Pc, eil)
     T_ext = CP.PropsSI("T", "P", Pe * 1e3, "H", h_ext * 1e3, "Water") - 273.15
     kw, src = (float(a["duty_kW"]), "duty_kW argument") if "duty_kW" in a else (None, None)
     if kw is None and "name" in a:
@@ -91,14 +122,18 @@ def t_lost_power(a):
     kg_s = kw / dh; lost_kw = kg_s * w_rest
     warn = []
     if q_exh is not None and q_exh < 0.85: warn.append(f"exhaust quality {q_exh:.2f} < 0.85: heavy moisture, the constant-efficiency model is optimistic")
-    if q_ext is not None: warn.append(f"extraction steam is wet (quality {q_ext:.2f}); check the expansion line and consider reheat (start_T_C/start_P_kPa)")
-    return {"duty_kW": kw, "duty_source": src, "start": {"P_kPa": P0, "T_C": T0, "h_kJ_kg": h0}, "condenser_P_kPa": Pc,
-            "extraction": {"P_kPa": Pe, "T_C": T_ext, "h_kJ_kg": h_ext, "quality": q_ext, "T_sat_C": Tsat}, "heat_given_kJ_kg": dh,
-            "steam_kg_s": kg_s, "steam_kg_h": kg_s * 3600, "work_still_available_kJ_kg": w_rest, "lost_power_kW": lost_kw, "lost_power_MW": lost_kw / 1e3,
-            "lost_power_per_heat_delivered": lost_kw / kw, "exhaust": {"h_kJ_kg": h_exh, "quality": q_exh},
-            "eta_s": {"to_extraction": e1, "remaining": e2}, "warnings": warn,
-            "basis": "single expansion line with constant isentropic efficiency; no reheat, feedwater heating or condensate-return credit unless the start state/duty encode them. "
-                     "Defaults: B11A main steam (1050 F, 2415 psia) and 1 psia hotwell from the report; efficiencies 0.88 are an ASSUMPTION, not from the report."}
+    if q_ext is not None: warn.append(f"extraction steam is wet (quality {q_ext:.2f}); check the expansion line")
+    out = {"duty_kW": kw, "duty_source": src, "start": {"P_kPa": P0, "T_C": T0, "h_kJ_kg": h0}, "condenser_P_kPa": Pc,
+           "extraction": {"P_kPa": Pe, "T_C": T_ext, "h_kJ_kg": h_ext, "quality": q_ext, "T_sat_C": Tsat, "section": ("HP/cold reheat" if rh and Pe >= Pr else "IP/LP") if rh else "single line"},
+           "heat_given_kJ_kg": dh, "steam_kg_s": kg_s, "steam_kg_h": kg_s * 3600, "work_still_available_kJ_kg": w_rest, "lost_power_kW": lost_kw,
+           "lost_power_MW": lost_kw / 1e3, "lost_power_per_heat_delivered": lost_kw / kw, "exhaust": {"h_kJ_kg": h_exh, "quality": q_exh},
+           "eta_s": ({"hp": effs[0], "ip_lp": effs[1]} if rh else {"to_extraction": e1, "remaining": e2}), "warnings": warn,
+           "basis": "constant isentropic efficiencies (0.88 default is an ASSUMPTION, not from the report); no feedwater-heating credit or condensate-return credit. "
+                    "Defaults: B11A main steam (1050 F, 2415 psia) and 1 psia hotwell from the report."}
+    if rh:
+        out["reheat"] = {**reheat_info, "reheat_dp_frac": dpf, "reheater_heat_saved_kW": kg_s * extra_heat_saved,
+                         "note": "reheat_dp_frac is an assumption; cold/hot reheat pressure and temperature are yours (not read from the report)"}
+    return out
 
 
 def _s(props, req): return {"type": "object", "properties": props, "required": req, "additionalProperties": False}
@@ -106,10 +141,11 @@ def _s(props, req): return {"type": "object", "properties": props, "required": r
 TOOLS = {
     "steam_lost_power": (t_lost_power, "Power lost when a heat duty (duty_kW, or a solved refinery session by name) is supplied by steam extracted from the turbine at extraction_P_kPa: "
                                        "expansion line from a start state (default B11A main steam) with isentropic efficiencies (default 0.88, an assumption) to the extraction and then the condenser pressure. "
-                                       "Returns steam flow, lost MW and MW lost per MW of heat delivered. CoolProp; no reheat unless you give the start state.",
+                                       "Returns steam flow, lost MW and MW lost per MW of heat delivered. Optional reheat: give reheat_P_kPa (cold reheat) and reheat_T_C (hot reheat) together. CoolProp.",
                          _s({"duty_kW": {"type": "number"}, "name": {"type": "string"}, "extraction_P_kPa": {"type": "number"}, "start_P_kPa": {"type": "number"},
                              "start_T_C": {"type": "number"}, "condenser_P_kPa": {"type": "number"}, "eta_s_to_extraction": {"type": "number"},
-                             "eta_s_remaining": {"type": "number"}, "condensate_T_C": {"type": "number"}}, ["extraction_P_kPa"])),
+                             "eta_s_remaining": {"type": "number"}, "condensate_T_C": {"type": "number"}, "reheat_P_kPa": {"type": "number"}, "reheat_T_C": {"type": "number"},
+                             "reheat_dp_frac": {"type": "number"}, "eta_s_hp": {"type": "number"}, "eta_s_ip_lp": {"type": "number"}}, ["extraction_P_kPa"])),
 "steam_demand_for_duty": (t_demand, "Steam flow needed to deliver a heat duty (duty_kW, or a solved refinery session by name) by condensing steam at steam_P_kPa (abs) "
                                              "to condensate_T_C, with its share of the NETL B11A main-steam flow and boiler heat. CoolProp steam properties; heat balance only.",
                                    _s({"duty_kW": {"type": "number"}, "name": {"type": "string"}, "steam_P_kPa": {"type": "number"}, "steam_T_C": {"type": "number"},

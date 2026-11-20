@@ -45,6 +45,24 @@ class Steam(unittest.TestCase):
             self.assertTrue(call("steam_lost_power", duty_kW=1.0, **bad)[0])
         self.assertTrue(call("steam_lost_power", extraction_P_kPa=1000.0)[0])
 
+    @unittest.skipUnless(HAVE, "needs CoolProp")
+    def test_reheat_extraction_sections_and_identities(self):
+        base = dict(duty_kW=10000.0, reheat_P_kPa=4000.0, reheat_T_C=565.0)
+        err, hp = call("steam_lost_power", extraction_P_kPa=6000.0, **base); self.assertFalse(err, hp)
+        err, lp = call("steam_lost_power", extraction_P_kPa=1000.0, **base); self.assertFalse(err, lp)
+        self.assertEqual(hp["extraction"]["section"], "HP/cold reheat"); self.assertEqual(lp["extraction"]["section"], "IP/LP")
+        rh = hp["reheat"]; self.assertEqual(lp["reheat"]["reheater_heat_saved_kW"], 0.0)
+        # HP extraction forgoes remaining HP work + all IP/LP work (independent re-sum from the reported section works)
+        h_ext = hp["extraction"]["h_kJ_kg"]; h_crh = rh["cold_reheat_via_extraction_h_kJ_kg"]
+        self.assertAlmostEqual(hp["work_still_available_kJ_kg"], (h_ext - h_crh) + rh["ip_lp_work_kJ_kg"], places=6)
+        self.assertAlmostEqual(hp["reheat"]["reheater_heat_saved_kW"], hp["steam_kg_s"] * (rh["hot_reheat"]["h_kJ_kg"] - h_crh))
+        self.assertGreater(hp["lost_power_per_heat_delivered"], lp["lost_power_per_heat_delivered"])      # skipping the reheat costs more power
+        # at the cold-reheat pressure the HP-section answer is the whole IP/LP work (no HP work left)
+        err, at = call("steam_lost_power", extraction_P_kPa=4000.0, **base); self.assertAlmostEqual(at["work_still_available_kJ_kg"], rh["ip_lp_work_kJ_kg"], places=6)
+        for bad in (dict(reheat_P_kPa=4000.0), dict(reheat_T_C=565.0), dict(reheat_P_kPa=30000.0, reheat_T_C=565.0)):
+            self.assertTrue(call("steam_lost_power", duty_kW=1.0, extraction_P_kPa=1000.0, **bad)[0])
+        self.assertTrue(call("steam_lost_power", extraction_P_kPa=3800.0, **base)[0])                 # inside the reheater pressure drop
+
 
 if __name__ == "__main__":
     unittest.main()
