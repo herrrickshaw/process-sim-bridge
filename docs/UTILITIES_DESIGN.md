@@ -15,7 +15,7 @@ Utilities are modelled as **consumers of the process**, not as simulated plants:
 ## 2. System by system
 | System | Demand comes from | Calculated | Not calculated (you decide) |
 |---|---|---|---|
-| **Steam** | a heater/reboiler duty, e.g. `refinery_session_duty`; header pressure | steam flow to condense at a chosen pressure (`steam_demand_for_duty`); feasibility vs the process temperature; turbine power forgone, with reheat and a feedwater-heater cascade (`steam_lost_power`) | header pressure levels, letdown/desuperheating, trap and flash losses, boiler efficiency and fuel |
+| **Steam** | a heater/reboiler duty, e.g. `refinery_session_duty`; header pressure | boiler (`utility_boiler`): water-side duty, fuel, combustion air, CO2 and stack loss; steam flow to condense at a chosen pressure (`steam_demand_for_duty`); feasibility vs the process temperature; turbine power forgone, with reheat and a feedwater-heater cascade (`steam_lost_power`) | header pressure levels, letdown/desuperheating, trap and flash losses, economiser/air preheater, fan and deaerator duty, blowdown heat recovery, boiler turndown and fuel supply |
 | **Demin water** | steam not returned as condensate + boiler blowdown (`utility_demin_water`) | make-up, raw water to the demin plant at a given recovery, reject | resin/membrane design, regeneration chemicals, condensate polishing, deaerator vent loss, blowdown flash recovery |
 | **Cooling water** | cooler, condenser and compressor-cooler duties (`utility_cooling_water`) | circulation flow from duty and temperature rise; with a tower: evaporation, blowdown, drift, make-up from cycles of concentration | tower thermal rating (approach to wet bulb), water treatment, pump head, fouling |
 | **Plant / instrument air** | Nm3/h demand, header pressure, optional dryer purge (`utility_compressed_gas`) | multistage intercooled compression power, stage temperatures, cooler duty | dryer type and dew point, receiver sizing, filtration, distribution losses |
@@ -23,6 +23,7 @@ Utilities are modelled as **consumers of the process**, not as simulated plants:
 `utilities_balance` runs the pieces together for one plant demand and returns each system plus a summary (steam kg/h, demin make-up, compressor kW, cooling duty and water, tower make-up).
 
 ## 3. Balances used
+- Boiler: `Q = m_steam (h_steam - h_fw) + m_blowdown (h_f - h_fw)`; fuel LHV from standard enthalpies of formation (checked against 50.0, 47.5, 46.3 and 120 MJ/kg); combustion with `excess_air_pct` gives the flue gas per mol of fuel; stack loss = ideal-gas enthalpy of that gas from ambient to stack temperature divided by the LHV; `eta = 1 - stack loss - radiation`; fuel = Q / eta; CO2 from the carbon balance. LHV basis, so the stack must stay above the flue-gas water dew point (warned).
 - Steam: `m = Q / (h_in - h_condensate)`, CoolProp IAPWS-95; condensing at `steam_P_kPa` to `condensate_T_C` (default saturated liquid).
 - Demin: `make-up = steam x (1 - return fraction) + boiler steam x blowdown%`; `raw water = make-up / recovery`.
 - Cooling water: `m = Q / (cp dT)`; tower: `evaporation = evaporative fraction x Q / h_fg`, `makeup = evaporation + blowdown + drift`, and a salt balance `makeup = COC x (blowdown + drift)`, so `blowdown + drift = evaporation / (COC - 1)`.
@@ -36,7 +37,8 @@ Utilities are modelled as **consumers of the process**, not as simulated plants:
 
 ## 5. Verified vs assumed
 - Verified: steam condensing path vs DWSIM steam tables (0.005%); expansion line vs CoolProp's IF97 backend (0.01%); demin and tower balances by closure tests; compression compared with the ideal-gas single-stage figure (intercooling saves, as it must, by 10-20% here); a two-stage 1000 Nm3/h air case at 8 bar abs gives about 0.106 kWh/Nm3 shaft with the assumed efficiencies.
-- Assumed (defaults, listed in every result): isentropic efficiency 0.75 and mechanical 0.95; suction/intercooler temperatures 30/35 C; maximum stage ratio 4; cooling water 30 to 40 C; 75% of tower heat rejected by evaporation; 4 cycles of concentration; boiler blowdown 1%; demin recovery 85%.
+- Boiler example (33,814 kg/h of 1 MPa saturated steam, 105 C feedwater, methane, 15% excess air, 180 C stack): 22.0 MW to water, efficiency 91.3% (LHV), 1,732 kg/h of fuel, 4,751 kg/h of CO2, 3.0% O2 dry in the flue gas.
+- Assumed (defaults, listed in every result): boiler feedwater 105 C, 15% excess air, 180 C stack, 1.5% radiation loss, 1% blowdown; isentropic efficiency 0.75 and mechanical 0.95; suction/intercooler temperatures 30/35 C; maximum stage ratio 4; cooling water 30 to 40 C; 75% of tower heat rejected by evaporation; 4 cycles of concentration; boiler blowdown 1%; demin recovery 85%.
 - Not checked against any vendor or plant data. Treat results as screening-level.
 
 ## 6. Open items (in priority order)
@@ -44,5 +46,5 @@ Utilities are modelled as **consumers of the process**, not as simulated plants:
 2. Air dryer and dew-point design (purge fraction by dryer type is now only an input).
 3. Header hydraulics and pressure levels, including steam letdown and desuperheating; relief of each header (the toolkit link `safety_relief_gas` can size gas headers).
 4. Cooling-tower thermal rating against wet-bulb; closed-loop versus once-through cooling.
-5. A boiler model so blowdown and fuel follow from steam demand, and a link back to the B11A cycle's other flows.
+5. Boiler extensions (economiser, air preheater, condensing operation, fan power, deaerator steam, blowdown flash recovery) and a link back to the B11A cycle's other flows.
 6. Plant availability and standby (N+1) sizing, which is a design-philosophy input, not a calculation.

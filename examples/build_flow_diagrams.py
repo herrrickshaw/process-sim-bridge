@@ -38,7 +38,7 @@ def gather():
         d["lost"] = SL.t_lost_power({"duty_kW": d["duty_kW"], "extraction_P_kPa": STEAM_P, "condensate_return_T_C": T_RET, "condensate_return_fraction": RETURN_FRAC, "fwh_heaters": HEATERS})
         d["bal"] = UL.t_balance({"steam_duty_kW": d["duty_kW"], "steam_P_kPa": STEAM_P, "condensate_return_fraction": RETURN_FRAC, "air_nm3_h": AIR_NM3, "air_P_out_kPa": AIR_P,
                                  "n2_nm3_h": N2_NM3, "n2_P_out_kPa": N2_P, "n2_method": "psa", "n2_purity": 0.995, "n2_recovery": N2_RECOVERY, "n2_feed_P_kPa": N2_P,
-                                 "other_cooling_duty_kW": OTHER_COOL_KW})
+                                 "other_cooling_duty_kW": OTHER_COOL_KW, "boiler_fuel": "methane"})
     return d
 
 
@@ -114,7 +114,7 @@ def ufd(d):
     S = Svg(1240, 700, "Utilities flow diagram: steam, demin water, cooling water, compressed air, nitrogen")
     if d["duty_kW"] is None:
         S.text(20, 80, "Needs a solved DWSIM case for the heater duty: set DWSIM_MCP_CMD and rerun.", "t"); return S.render()
-    st, lo, b = d["steam"], d["lost"], d["bal"]; dm, cw, air, n2, sm = b["demin"], b["cooling_water"], b["air"], b["nitrogen"], b["summary"]; cr = lo["feedwater_credit"]
+    st, lo, b = d["steam"], d["lost"], d["bal"]; bo = b["boiler"]; dm, cw, air, n2, sm = b["demin"], b["cooling_water"], b["air"], b["nitrogen"], b["summary"]; cr = lo["feedwater_credit"]
     S.box(20, 70, 200, 90, "Boiler (B11A basis)", ["main steam 1050 F, 2415 psia", f"{f0(SL.B11A_MAIN_STEAM_LB_H * SL.LB_KG)} kg/h", f"{f0(SL.B11A_BOILER_MW)} MW fluid heat"], "src")
     S.box(300, 70, 250, 90, "Turbine", [f"extraction at {STEAM_P / 1e3:g} MPa", f"steam {f0(st['steam_kg_h'])} kg/h ({st['share_of_B11A_main_steam_pct']:.1f}% of main)", f"power lost {f2(lo['lost_power_MW'])} MW net"], "unit")
     S.box(610, 70, 200, 90, "Process heater H1", [f"duty {f2(d['duty_kW'] / 1e3)} MW", f"condenses at {st['T_sat_C']:.0f} C", f"-> {T_OUT:.0f} C gasoline pool"], "unit")
@@ -125,8 +125,11 @@ def ufd(d):
     S.box(300, 220, 250, 66, "Feedwater train", [f"{len(HEATERS)} heaters {HEATERS[0]:g}-{HEATERS[-1]:g} kPa (cascade)", f"return credit {f2(cr['credit_kW'] / 1e3)} MW"], "unit")
     S.arrow([(610, 253), (550, 253)], "dm"); S.text(560, 244, "return", "sm")
     S.arrow([(300, 253), (120, 253), (120, 160)], "st"); S.text(130, 245, "feedwater", "sm")
+    S.box(20, 330, 260, 120, "Package boiler (alternative supply)", [f"same {f0(bo['steam_kg_h'])} kg/h at {STEAM_P / 1e3:g} MPa, methane", f"{f1(bo['heat_to_water_kW'] / 1e3)} MW to water, eff. {bo['efficiency_lhv'] * 100:.1f}% LHV", f"fuel {f0(bo['fuel_kg_h'])} kg/h, CO2 {f0(bo['co2_kg_h'])} kg/h",
+                                                       f"stack {bo['stack_T_C']:.0f} C, {bo['combustion']['excess_air_pct']:.0f}% excess air (assumed)"], "src")
     S.box(610, 340, 200, 78, "Demin plant", [f"make-up {f0(dm['demin_makeup_kg_h'])} kg/h", f"raw water {f0(dm['raw_water_to_demin_kg_h'])} kg/h", f"reject {f0(dm['demin_reject_kg_h'])} kg/h"], "util")
     S.arrow([(610, 379), (425, 379), (425, 286)], "dm"); S.text(440, 372, "demin make-up", "sm")
+    S.text(30, 466, "Boiler or B11A extraction: one supplies the steam, not both.", "sm")
     S.box(860, 70, 280, 100, "Cooling tower loop", [f"duty {f2(cw['duty_kW'] / 1e3)} MW ({cw['supply_T_C']:.0f}->{cw['return_T_C']:.0f} C)", f"circulation {f0(cw['flow_m3_h'])} m3/h", f"make-up {f1(cw['makeup_m3_h'])} m3/h, blowdown {f1(cw['blowdown_kg_s'] * 3.6)} m3/h"], "util")
     S.box(860, 220, 280, 66, "Coolers", [f"compressor coolers {f2((air['cooling_duty_kW'] + n2['cooling_duty_kW']) / 1e3)} MW", f"other process {f2(OTHER_COOL_KW / 1e3)} MW"], "unit")
     S.arrow([(930, 170), (930, 220)], "cw"); S.text(936, 200, "cold", "sm"); S.arrow([(1070, 220), (1070, 170)], "cw"); S.text(1076, 200, "hot", "sm")
@@ -135,7 +138,7 @@ def ufd(d):
     S.arrow([(1140, 388), (1215, 388)], "gas"); S.text(1146, 380, "to plant", "sm"); S.arrow([(1140, 525), (1215, 525)], "gas"); S.text(1146, 517, "to plant", "sm")
     S.arrow([(960, 340), (960, 286)], "cw"); S.text(966, 318, "air cooler duty", "sm")
     S.arrow([(860, 520), (835, 520), (835, 253), (860, 253)], "cw"); S.text(756, 512, "N2 cooler", "sm"); S.text(756, 526, "duty", "sm")
-    S.box(20, 470, 730, 90, "Electricity and totals", [f"compressors + nitrogen: {f0(sm['compressor_shaft_kW'])} kW (air {f0(air['shaft_power_kW'])}, N2 {f0(n2['electric_kW'])})",
+    S.box(20, 480, 730, 90, "Electricity and totals", [f"compressors + nitrogen: {f0(sm['compressor_shaft_kW'])} kW (air {f0(air['shaft_power_kW'])}, N2 {f0(n2['electric_kW'])})",
          f"cooling duty {f2(sm['cooling_duty_kW'] / 1e3)} MW -> circulation {f0(sm['cooling_water_m3_h'])} m3/h, make-up {f1(sm['cooling_tower_makeup_m3_h'])} m3/h",
          f"steam {f0(sm['steam_kg_h'])} kg/h, demin make-up {f0(sm['demin_makeup_kg_h'])} kg/h, turbine power lost {f2(lo['lost_power_MW'])} MW (gross {f2(lo['gross_lost_power_kW'] / 1e3)})"], "box")
     S.text(20, 620, "Illustrative inputs: 0.88 turbine efficiencies, 3 K heater TTD, 50% condensate return at 90 C, PSA recovery 0.45, header pressures, air/N2/other cooling demands, 1% blowdown, 85% demin recovery, 75% evaporative cooling, 4 cycles.", "note")

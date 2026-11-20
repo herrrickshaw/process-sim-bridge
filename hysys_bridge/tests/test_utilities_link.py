@@ -90,5 +90,43 @@ class Utilities(unittest.TestCase):
         self.assertEqual(r["nitrogen"]["method"], "psa")
 
 
+@unittest.skipUnless(HAVE, "needs CoolProp")
+class Boiler(unittest.TestCase):
+    def test_heating_values_match_the_known_lhv(self):
+        from hysys_bridge import utilities_link as U
+        for fuel, mj in (("methane", 50.0), ("ethane", 47.5), ("propane", 46.35), ("hydrogen", 120.0)):
+            self.assertAlmostEqual(U.fuel_lhv_kj_mol(fuel) / U.FUELS[fuel]["M"], mj, delta=0.01 * mj)
+
+    def test_energy_balance_and_combustion_closure(self):
+        err, r = call("utility_boiler", steam_kg_h=10000.0, steam_P_kPa=1000.0, feedwater_T_C=105.0, blowdown_pct=2.0); self.assertFalse(err, r)
+        q = (10000.0 * (r["steam_h_kJ_kg"] - r["feedwater_h_kJ_kg"])) / 3600 + 200.0 * (CoolProp.CoolProp.PropsSI("H", "P", 1e6, "Q", 0, "Water") / 1e3 - r["feedwater_h_kJ_kg"]) / 3600
+        self.assertAlmostEqual(r["heat_to_water_kW"], q, places=6); self.assertAlmostEqual(r["feedwater_kg_h"], 10200.0)
+        self.assertAlmostEqual(r["fuel_kW_lhv"] * r["efficiency_lhv"], r["heat_to_water_kW"])
+        self.assertAlmostEqual(r["fuel_kg_h"] * r["fuel_lhv_kJ_kg"] / 3600, r["fuel_kW_lhv"], delta=1e-6 * r["fuel_kW_lhv"])
+        self.assertAlmostEqual(r["co2_kg_h"], r["fuel_kg_h"] / 16.043 * 44.01, delta=1e-4 * r["co2_kg_h"])                # 1 mol CO2 per mol CH4
+        c = r["combustion"]; self.assertAlmostEqual(c["flue_gas_mol_per_mol_fuel"]["Water"], 2.0)
+        self.assertAlmostEqual(c["flue_gas_mol_per_mol_fuel"]["Oxygen"], 2.0 * 0.15)                                      # excess O2 = 15% of the 2 mol needed
+        self.assertAlmostEqual(c["flue_gas_O2_dry_pct"], 3.0, delta=0.2); self.assertTrue(0.85 < r["efficiency_lhv"] < 0.95)
+        self.assertEqual(set(r["assumed_defaults"]), {"ambient_T_C", "excess_air_pct", "stack_T_C", "radiation_loss_frac"})        # feedwater T and blowdown were given
+
+    def test_losses_move_the_right_way(self):
+        base = dict(steam_kg_h=10000.0, steam_P_kPa=1000.0)
+        e = lambda **k: call("utility_boiler", **base, **k)[1]["efficiency_lhv"]
+        self.assertGreater(e(stack_T_C=140.0), e(stack_T_C=250.0)); self.assertGreater(e(excess_air_pct=5.0), e(excess_air_pct=40.0))
+        self.assertAlmostEqual(e(stack_T_C=25.0, radiation_loss_frac=0.0), 1.0, places=9)                                 # no flue-gas heat to lose when it leaves at ambient
+        self.assertAlmostEqual(call("utility_boiler", efficiency_lhv=0.9, **base)[1]["efficiency_lhv"], 0.9)
+        self.assertEqual(call("utility_boiler", efficiency_lhv=0.9, **base)[1]["efficiency_basis"], "given")
+        h2 = call("utility_boiler", fuel="hydrogen", **base)[1]; self.assertEqual(h2["co2_kg_h"], 0.0); self.assertLess(h2["fuel_kg_h"], call("utility_boiler", **base)[1]["fuel_kg_h"] / 2)
+        self.assertTrue(any("dew point" in w for w in call("utility_boiler", stack_T_C=60.0, **base)[1]["warnings"]))
+        for bad in (dict(fuel="coal"), dict(steam_T_C=100.0), dict(feedwater_T_C=300.0), dict(efficiency_lhv=1.5), dict(stack_T_C=10.0)):
+            self.assertTrue(call("utility_boiler", **{**base, **bad})[0])
+
+    def test_balance_with_a_boiler(self):
+        err, r = call("utilities_balance", steam_duty_kW=10000.0, steam_P_kPa=1000.0, condensate_return_fraction=0.5, boiler_fuel="methane"); self.assertFalse(err, r)
+        self.assertAlmostEqual(r["boiler"]["steam_kg_h"], r["steam"]["steam_kg_h"]); self.assertEqual(r["summary"]["boiler_fuel_kg_h"], r["boiler"]["fuel_kg_h"])
+        self.assertAlmostEqual(r["boiler"]["blowdown_kg_h"], r["demin"]["boiler_blowdown_kg_h"])                           # one blowdown figure across boiler and demin
+        self.assertTrue(call("utilities_balance", boiler_fuel="methane")[0])
+
+
 if __name__ == "__main__":
     unittest.main()
