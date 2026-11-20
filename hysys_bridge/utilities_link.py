@@ -165,21 +165,38 @@ def t_boiler(a):
     if "efficiency_lhv" in a:
         eta = float(a["efficiency_lhv"])
         if not 0.3 <= eta <= 1.0: raise ValueError("efficiency_lhv must be in [0.3, 1.0]")
+        if a.get("economiser"): raise ValueError("economiser needs the indirect method: do not pass efficiency_lhv")
         out["efficiency_basis"] = "given"; out["efficiency_lhv"] = eta
     else:
-        T_st = _num(a, "stack_T_C", 180.0, T_amb, assumed=asm); rad = _num(a, "radiation_loss_frac", 0.015, 0.0, 0.2, asm)
-        sens = sum(n * (_ideal_h({"CO2": "CO2", "Water": "Water", "Oxygen": "Oxygen", "Nitrogen": "Nitrogen"}[k], T_st) - _ideal_h({"CO2": "CO2", "Water": "Water", "Oxygen": "Oxygen", "Nitrogen": "Nitrogen"}[k], T_amb)) for k, n in gas.items())
+        eco = bool(a.get("economiser"))
+        rad = _num(a, "radiation_loss_frac", 0.015, 0.0, 0.2, asm)
+        sens_at = lambda T: sum(n * (_ideal_h(k, T) - _ideal_h(k, T_amb)) for k, n in gas.items())          # kJ per mol fuel, flue gas from ambient to T
+        if eco:
+            if "stack_T_C" in a: raise ValueError("with economiser the stack temperature follows from the feedwater inlet and economiser_approach_K; do not pass stack_T_C")
+            T_gin = _num(a, "economiser_gas_in_C", 280.0, T_amb, assumed=asm); appr = _num(a, "economiser_approach_K", 40.0, 5.0, assumed=asm)
+            T_st = T_fw + appr
+            if T_gin <= T_st: raise ValueError(f"economiser_gas_in_C {T_gin:g} must exceed the stack temperature {T_st:g} (feedwater inlet + approach)")
+            eta_bare = 1 - sens_at(T_gin) / lhv_mol - rad
+        else: T_st = _num(a, "stack_T_C", 180.0, T_amb, assumed=asm)
         # fuel and combustion air enter at ambient, so the only sensible term is the flue gas leaving at the stack temperature
-        stack_loss = sens / lhv_mol; eta = 1 - stack_loss - rad
+        stack_loss = sens_at(T_st) / lhv_mol; eta = 1 - stack_loss - rad
         p_w = gas["Water"] / tot * 101.325; T_dew = CP.PropsSI("T", "P", p_w * 1e3, "Q", 1, "Water") - 273.15
         if T_st < T_dew + 5: warn.append(f"stack {T_st:g} C is within 5 K of the flue-gas water dew point {T_dew:.0f} C: condensation, the LHV-basis stack-loss model no longer holds")
         elif T_st < 120: warn.append("stack below about 120 C risks acid-gas (sulphur) condensation with sulphur-bearing fuels")
         out.update({"efficiency_basis": "indirect (stack loss + radiation)", "stack_T_C": T_st, "stack_loss_frac": stack_loss, "radiation_loss_frac": rad, "flue_gas_water_dew_C": T_dew, "efficiency_lhv": eta})
     fuel_kw = q_kw / out["efficiency_lhv"]; mol_s = fuel_kw / lhv_mol
+    if a.get("economiser"):
+        q_eco = mol_s * (sens_at(T_gin) - sens_at(T_st))                                                  # kW: flue gas cooled from the boiler exit to the stack
+        h_eco = h_fw + q_eco * 3600 / (steam + bd_kg_h); T_eco = CP.PropsSI("T", "P", P * 1e3, "H", h_eco * 1e3, "Water") - 273.15
+        T_sat = CP.PropsSI("T", "P", P * 1e3, "Q", 0, "Water") - 273.15
+        if h_eco >= h_bd: raise ValueError("economiser would boil the feedwater: raise economiser_approach_K or lower economiser_gas_in_C")
+        if T_sat - T_eco < 20: warn.append(f"economiser outlet {T_eco:.0f} C is within 20 K of saturation {T_sat:.0f} C: steaming risk, normal design keeps a larger margin")
+        out["economiser"] = {"gas_in_C": T_gin, "gas_out_C": T_st, "approach_K": appr, "duty_kW": q_eco, "feedwater_out_C": T_eco, "evaporator_duty_kW": q_kw - q_eco,
+                             "efficiency_lhv_without": eta_bare, "fuel_kW_lhv_without": q_kw / eta_bare, "fuel_saving_pct": 100 * (1 - eta_bare / eta), "gas_dp_ignored": True}
     out.update({"fuel_kW_lhv": fuel_kw, "fuel_kg_h": mol_s * f["M"] * 3.6, "fuel_nm3_h": mol_s * 3600 / NM3_MOL,
                 "combustion_air_nm3_h": mol_s * 3600 * n_air / NM3_MOL, "co2_kg_h": mol_s * f["C"] * 44.01 * 3.6, "co2_kg_per_MWh_heat": (mol_s * f["C"] * 44.01 * 3.6) / (q_kw / 1e3) if q_kw else None,
                 "specific_fuel_kJ_per_kg_steam": fuel_kw * 3600 / steam if steam else None, "warnings": warn, "assumed_defaults": asm,
-                "note": "no economiser/air preheater, soot-blowing, blowdown heat recovery, fan power or deaerator steam; fuel enthalpy and combustion air at ambient"})
+                "note": "no air preheater, soot-blowing, blowdown heat recovery, fan power or deaerator steam; fuel enthalpy and combustion air at ambient"})
     return out
 
 
@@ -228,7 +245,7 @@ def t_balance(a):
     if "boiler_fuel" in a:
         if "steam" not in res: raise ValueError("boiler_fuel needs steam_duty_kW and steam_P_kPa (the boiler makes the steam the process demands)")
         bkw = {"steam_kg_h": res["steam"]["steam_kg_h"], "steam_P_kPa": a["steam_P_kPa"], "fuel": a["boiler_fuel"], **({"blowdown_pct": a["blowdown_pct"]} if "blowdown_pct" in a else {}),
-               **{k[7:]: a[k] for k in ("boiler_feedwater_T_C", "boiler_stack_T_C", "boiler_excess_air_pct", "boiler_efficiency_lhv") if k in a}}
+               **{k[7:]: a[k] for k in ("boiler_feedwater_T_C", "boiler_stack_T_C", "boiler_excess_air_pct", "boiler_efficiency_lhv", "boiler_economiser", "boiler_economiser_gas_in_C", "boiler_economiser_approach_K") if k in a}}
         res["boiler"] = t_boiler(bkw)
     for key, gas in (("air_nm3_h", "air"), ("n2_nm3_h", "nitrogen")):
         if key in a and gas == "nitrogen" and "n2_method" in a:
@@ -257,9 +274,9 @@ def _s(props, req): return {"type": "object", "properties": props, "required": r
 _n = {"type": "number"}
 
 TOOLS = {
-    "utility_boiler": (t_boiler, "Steam boiler: water-side duty from CoolProp steam/feedwater enthalpies (with blowdown), fuel from a given LHV efficiency or the indirect method (stack loss from combustion gas, radiation), plus fuel, combustion air and CO2. Fuels: methane, ethane, propane, hydrogen. Excess air, stack temperature, feedwater temperature, blowdown and radiation loss are assumed defaults listed in the result.",
+    "utility_boiler": (t_boiler, "Steam boiler: water-side duty from CoolProp steam/feedwater enthalpies (with blowdown), fuel from a given LHV efficiency or the indirect method (stack loss from combustion gas, radiation), plus fuel, combustion air and CO2. Fuels: methane, ethane, propane, hydrogen. Optional economiser (economiser=true): stack = feedwater inlet + approach, reports its duty, feedwater outlet and fuel saved. Excess air, stack temperature, feedwater temperature, blowdown and radiation loss are assumed defaults listed in the result.",
                        _s({"steam_kg_h": _n, "steam_P_kPa": _n, "steam_T_C": _n, "feedwater_T_C": _n, "blowdown_pct": _n, "fuel": {"type": "string"}, "fuel_lhv_kJ_kg": _n, "excess_air_pct": _n,
-                           "stack_T_C": _n, "radiation_loss_frac": _n, "efficiency_lhv": _n, "ambient_T_C": _n}, ["steam_kg_h", "steam_P_kPa"])),
+                           "stack_T_C": _n, "radiation_loss_frac": _n, "efficiency_lhv": _n, "ambient_T_C": _n, "economiser": {"type": "boolean"}, "economiser_gas_in_C": _n, "economiser_approach_K": _n}, ["steam_kg_h", "steam_P_kPa"])),
     "utility_nitrogen_generation": (t_n2_generation, "Electricity and cooling for on-site nitrogen by psa, membrane or cryogenic route: feed air (PSA/membrane) or reversible work over a second-law efficiency (cryogenic), product booster, and the reversible minimum with the implied second-law efficiency. PSA/membrane need your recovery (vendor data); cryogenic defaults (recovery 0.95, second-law efficiency 0.25) are assumptions listed in the result.",
                                     _s({"method": {"type": "string"}, "product_nm3_h": _n, "purity": _n, "delivery_P_kPa": _n, "n2_recovery": _n, "feed_P_kPa": _n, "product_dp_kPa": _n, "second_law_eff": _n,
                                         "product_P_kPa": _n, "ambient_T_C": _n, "eta_is": _n, "eta_mech": _n}, ["method", "product_nm3_h", "purity", "delivery_P_kPa"])),
@@ -273,7 +290,7 @@ TOOLS = {
     "utilities_balance": (t_balance, "One consistent utility balance: steam for a heat duty (optionally made in a boiler: boiler_fuel) (condensing at steam_P_kPa), its demin make-up, compressed air and nitrogen to header pressures, and the cooling water for compressor coolers plus other duties incl. tower make-up. Returns each system and a summary of steam, make-up, electricity and cooling.",
                           _s({"steam_duty_kW": _n, "steam_P_kPa": _n, "condensate_T_C": _n, "condensate_return_fraction": _n, "blowdown_pct": _n, "demin_recovery": _n, "boiler_steam_kg_h": _n,
                               "air_nm3_h": _n, "air_P_out_kPa": _n, "air_dryer_purge_fraction": _n, "n2_nm3_h": _n, "n2_P_out_kPa": _n, "suction_P_kPa": _n,
-                              "boiler_fuel": {"type": "string"}, "boiler_feedwater_T_C": _n, "boiler_stack_T_C": _n, "boiler_excess_air_pct": _n, "boiler_efficiency_lhv": _n,
+                              "boiler_fuel": {"type": "string"}, "boiler_feedwater_T_C": _n, "boiler_stack_T_C": _n, "boiler_excess_air_pct": _n, "boiler_efficiency_lhv": _n, "boiler_economiser": {"type": "boolean"}, "boiler_economiser_gas_in_C": _n, "boiler_economiser_approach_K": _n,
                               "n2_method": {"type": "string"}, "n2_purity": _n, "n2_recovery": _n, "n2_feed_P_kPa": _n, "n2_second_law_eff": _n,
                               "other_cooling_duty_kW": _n, "supply_T_C": _n, "return_T_C": _n, "cycles_of_concentration": _n}, [])),
 }

@@ -121,6 +121,21 @@ class Boiler(unittest.TestCase):
         for bad in (dict(fuel="coal"), dict(steam_T_C=100.0), dict(feedwater_T_C=300.0), dict(efficiency_lhv=1.5), dict(stack_T_C=10.0)):
             self.assertTrue(call("utility_boiler", **{**base, **bad})[0])
 
+    def test_economiser(self):
+        base = dict(steam_kg_h=10000.0, steam_P_kPa=1000.0, blowdown_pct=2.0)
+        err, r = call("utility_boiler", economiser=True, **base); self.assertFalse(err, r)
+        e = r["economiser"]; H = lambda T: CoolProp.CoolProp.PropsSI("H", "P", 1e6, "T", T + 273.15, "Water") / 1e3
+        self.assertAlmostEqual(r["stack_T_C"], r["feedwater_T_C"] + 40.0)                                                  # stack = feedwater inlet + approach
+        self.assertAlmostEqual(e["duty_kW"], r["feedwater_kg_h"] * (H(e["feedwater_out_C"]) - r["feedwater_h_kJ_kg"]) / 3600, delta=1e-6 * e["duty_kW"])
+        self.assertAlmostEqual(e["duty_kW"] + e["evaporator_duty_kW"], r["heat_to_water_kW"])
+        self.assertAlmostEqual(e["fuel_kW_lhv_without"] * e["efficiency_lhv_without"], r["heat_to_water_kW"])
+        self.assertAlmostEqual(e["fuel_saving_pct"], 100 * (1 - e["efficiency_lhv_without"] / r["efficiency_lhv"]), places=9)
+        self.assertGreater(r["efficiency_lhv"], e["efficiency_lhv_without"]); self.assertGreater(e["feedwater_out_C"], r["feedwater_T_C"])
+        self.assertLess(call("utility_boiler", economiser=True, economiser_approach_K=20.0, **base)[1]["fuel_kg_h"], r["fuel_kg_h"])      # colder stack, less fuel
+        self.assertGreater(e["fuel_saving_pct"], 0.0); self.assertIn("economiser_approach_K", r["assumed_defaults"])
+        for bad in (dict(stack_T_C=150.0), dict(efficiency_lhv=0.9), dict(economiser_gas_in_C=140.0), dict(economiser_gas_in_C=900.0, feedwater_T_C=150.0)):
+            self.assertTrue(call("utility_boiler", economiser=True, **{**base, **bad})[0], bad)
+
     def test_balance_with_a_boiler(self):
         err, r = call("utilities_balance", steam_duty_kW=10000.0, steam_P_kPa=1000.0, condensate_return_fraction=0.5, boiler_fuel="methane"); self.assertFalse(err, r)
         self.assertAlmostEqual(r["boiler"]["steam_kg_h"], r["steam"]["steam_kg_h"]); self.assertEqual(r["summary"]["boiler_fuel_kg_h"], r["boiler"]["fuel_kg_h"])
