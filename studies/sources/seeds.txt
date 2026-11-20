@@ -1,0 +1,23 @@
+# Seed URLs: public university pages found by web search on 2026-11-20 (titles and snippets only; none read before this run).
+# One page per URL, no link following. Add a URL here to have it indexed; remove a host to stop it being visited.
+https://courses.washington.edu/overney/Aspen/Aspen_Tutorial.pdf
+https://eelc.engineering.ucdavis.edu/integration-of-aspen-plus-learning-modules-into-a-process-design-and-economics-course/
+https://public.websites.umich.edu/~essen/html/course/lectures/eleven/aspenv10.2/0_title.htm
+https://websites.umich.edu/~elements/course/lectures/eight/aspenv10.2/0_title.htm
+https://sites.chemengr.ucsb.edu/~ceweb/courses/che184a/pdfs/HYSYS%20MANUAL.pdf
+https://www.departments.bucknell.edu/chem_eng/cheg200/HYSYS-v10.0_Manual/aHYSYS.pdf
+https://www.kfu.edu.sa/en/Colleges/AhsaEngineering/Documents/ChE 410 Lab Manual.pdf
+https://pselab.chem.polimi.it/wp-content/uploads/2018/04/Lab-06-JP.pdf
+https://primary.fossee.in/dwsim/manuals/SASTRA-FOSSEE-DWSIM-v02-30Dec17.pdf
+https://www.marwadiuniversity.ac.in/wp-content/uploads/2026/05/PSD-1-01CH0307.pdf
+https://dicca.dottorato.unige.it/sites/dicca.dottorato.unige.it/files/2026-07/Bove_2026_2027.pdf
+https://www.usj.edu.lb/esib/course-syllabus-2024/CPE/020MOSCS3.pdf
+https://orbi.uliege.be/bitstream/2268/144857/1/TPAspen_complet.pdf
+https://old-seds.nu.edu.kz/programs/undergraduate-programs/bachelor-of-engineering-in-chemical-and-materials-engineering/chme400-process-design-and-simulation
+https://archive.nptel.ac.in/content/storage2/courses/103101009/modules/module1/sec1/1.3.html
+https://ocw.snu.ac.kr/sites/default/files/NOTE/Lecture10_0.pdf
+https://www.just.edu.jo/~yahussain/files/Getting Started.pdf
+https://bitmesra.ac.in/UploadedDocuments/admince/files/Module%205%20Computer%20Aided%20Process%20Engineering.pdf
+https://cuir.car.chula.ac.th/bitstream/123456789/67600/4/Chakkit_wi_ch3_p.pdf
+https://sites.ualberta.ca/CMENG/che312/F06ChE416/HysysDocs/AspenPlus20041InputLanguageGuide.pdf
+https://journals.flvc.org/cee/article/view/120711/127574
