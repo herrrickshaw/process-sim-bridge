@@ -35,7 +35,7 @@ def _close(name):
 def t_status(a):
     cmd = os.environ.get("DWSIM_MCP_CMD")
     return {"live_possible": bool(cmd), "DWSIM_MCP_CMD_set": bool(cmd), "built_cases": sorted(CASES),
-            "note": "verified on pump/heater/cooler only; valve, compressor, splitter, vessel unit parameters are unverified"}
+            "note": "unit parameters verified on pump, heater, cooler, valve, compressor, mixer, vessel, splitter (splitter needs the first outlet's mass flow)"}
 
 
 def t_check_specs(a):

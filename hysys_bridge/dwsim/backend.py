@@ -6,7 +6,7 @@ VERIFIED 2026-11-20 against the real server (ghcr.io/danwbr/dwsim-mcp:latest, se
   * Property packages are full names: "Peng-Robinson (PR)", "Soave-Redlich-Kwong (SRK)", "NRTL", "Steam Tables (IAPWS-IF97)".
   * Stream `composition` is MASS fractions. Mole-basis input therefore needs molar masses (`mw`), else it is refused.
   * One dwsim_unitop_connect call per stream; Pump takes `DeltaP` (Pa); Heater/Cooler take CalcMode='OutletTemperature',
-    OutletTemperature (K) and DeltaP (Pa) via dwsim_unitop_set. Valve/Compressor/Splitter/Vessel property names are NOT verified.
+    OutletTemperature (K) and DeltaP (Pa) via dwsim_unitop_set. Splitter: OperationMode=StreamMassFlowSpec + StreamFlowSpec (first outlet), verified.
   * dwsim_flowsheet_degrees_of_freedom / dwsim_flowsheet_check exist and are used as a gate before solving;
     dwsim_stream_get_results gives real results, so read-back after solve is genuine (the pre-solve read-back is local).
 Units: the server is SI (K, Pa, kg/s). Values are converted here (C->K, kPa->Pa, kg/h->kg/s).
@@ -24,7 +24,7 @@ TOOLS = {
 }
 DWSIM_TYPE = {"mixer": "Mixer", "splitter": "Splitter", "pump": "Pump", "heater": "Heater", "cooler": "Cooler",
               "valve": "Valve", "compressor": "Compressor", "separator": "Vessel"}      # names are in dwsim_unitop_add's list
-UNIT_PARAMS_VERIFIED = {"pump", "heater", "cooler", "valve", "compressor", "mixer", "separator"}   # splitter: only via StreamMassFlowSpec, not mapped from the IR
+UNIT_PARAMS_VERIFIED = {"pump", "heater", "cooler", "valve", "compressor", "mixer", "separator", "splitter"}   # splitter: first outlet mass flow -> StreamMassFlowSpec, verified 2026-11-20 (1000 -> 300 + 700 kg/h)
 PACKAGE = {"Peng-Robinson": "Peng-Robinson (PR)", "SRK": "Soave-Redlich-Kwong (SRK)", "Steam Tables": "Steam Tables (IAPWS-IF97)"}
 KEYMAP = {"T": ("temperature_K", lambda v: v + 273.15, lambda v: v - 273.15),
           "P": ("pressure_Pa", lambda v: v * 1e3, lambda v: v / 1e3),
@@ -128,6 +128,8 @@ class DwsimBackend:
             if dp is not None: p["DeltaP"] = dp                                    # pressure DROP
         elif t == "valve" and dp is not None: p["DeltaP"] = dp                      # pressure DROP, verified 2026-11-20 (CH4 50->20 bar, isenthalpic)
         elif t == "compressor" and "pressure_Pa" in o: p["POut"] = o["pressure_Pa"]  # absolute outlet pressure; efficiency left at the 75% default
+        elif t == "splitter" and len(outs) > 1 and "mass_flow_kg_s" in o:             # first outlet's mass flow fixes the split; the rest is the balance
+            p.update(OperationMode="StreamMassFlowSpec", StreamFlowSpec=o["mass_flow_kg_s"])
         return p
 
     def flush(self):

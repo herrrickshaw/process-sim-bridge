@@ -248,6 +248,10 @@ TOOLS = {
 }
 from .dwsim.tools import TOOLS as _DWSIM_TOOLS        # dwsim_* tools drive DWSIM from the same sessions
 TOOLS.update(_DWSIM_TOOLS)
+from .aspen.tools import TOOLS as _ASPEN_TOOLS        # aspen_* tools (mock tree by default; live COM untested)
+TOOLS.update(_ASPEN_TOOLS)
+from .safety_link import TOOLS as _SAFETY_TOOLS      # safety_* tools: solved streams -> process-safety-design-toolkit
+TOOLS.update(_SAFETY_TOOLS)
 
 
 # ---- JSON-RPC / MCP stdio loop ----------------------------------------------------------------------------

@@ -79,3 +79,13 @@ class Dwsim(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DwsimSplitter(unittest.TestCase):
+    def test_splitter_first_outlet_mass_flow_becomes_the_flow_spec(self):
+        fs = Flowsheet("t", "Peng-Robinson", ["Water"])
+        fs.streams = {"F": Stream("F", "feed", None, "SP", T_C=25.0, P_kPa=101.325, mass_flow_kg_h=1000.0, composition={"Water": 1.0}, composition_basis="mass"),
+                      "A": Stream("A", "product", "SP", None, mass_flow_kg_h=300.0), "B": Stream("B", "product", "SP", None)}
+        fs.units = {"SP": Unit("SP", "splitter")}; fs.relink()
+        be = DwsimBackend(FakeDwsim()); hysys_writer.write(fs, be); be.set("A", "mass", 300.0)   # the writer only writes feed flows, so the split spec is set directly
+        self.assertEqual(be._unit_params(be.units["SP"]), {"OperationMode": "StreamMassFlowSpec", "StreamFlowSpec": 300.0 / 3600})
