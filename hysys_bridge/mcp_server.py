@@ -306,3 +306,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+from .casebook.tools import TOOLS as _CASEBOOK_TOOLS  # casebook_* tools: published reference cases run on DWSIM and compared
+TOOLS.update(_CASEBOOK_TOOLS)

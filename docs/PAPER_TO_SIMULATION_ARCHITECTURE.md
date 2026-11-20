@@ -33,7 +33,7 @@ discover -> acquire -> extract -> review -> case record -> capability check
 | 11 Studies | Parametric sweeps and sensitivities on verified cases (section 5) | study report plus ledger rows | Not built |
 | 12 Eval set | Each verified case becomes a natural-language task plus a reference result for the copilot | `studies/eval/*.json` | Not built |
 
-## 3. Case schema (sketch)
+## 3. Case schema (sketch; the built version is JSON, see section 9)
 ```yaml
 id: cumene-alkylator-feed-heater
 source: {doi: ..., title: ..., pages: [..], licence: copyrighted, use: facts-only, fetch_route: pdfcoffee page, read: full-text}
@@ -69,7 +69,7 @@ A study is a spec on top of a verified case: `{case, variables, ranges, outputs,
 ```
 studies/
   sources.jsonl        discovery and status
-  cases/*.yaml         reviewed case records (committed; facts only)
+  cases/*.json         reviewed case records (committed; facts only; JSON so there is no dependency)
   raw/                 fetched documents (gitignored)
   ledger.jsonl         append-only run results
   eval/                copilot tasks and reference results
@@ -108,3 +108,34 @@ These come from search-result snippets and titles only (PTQ Q1 2024 and a KBC wh
 | AI scheduling over a refinery digital twin | Far downstream of the current tools | Park |
 
 An OpenAlex search sorted by citations for these topics returned mostly off-topic highly cited papers, so no paper leads were added from it; a narrower query (by journal or by DOI from the trade-press references) is the next step.
+
+## 9. Phase 0 status (built 2026-11-20)
+Built in `hysys_bridge/casebook/`: `schema.py` (validator, capability check against the verified unit list, case hash, scenario overrides, conversion to the Flowsheet IR), `runner.py` (every scenario times every property package on DWSIM, comparison, package spread, reproduce check), `ledger.py` (append-only `studies/ledger.jsonl`), `tools.py` (`casebook_list`, `casebook_validate`, `casebook_run`; the ledger is written only with `confirm=true`; case ids are restricted to `[a-z0-9-]` so no path traversal) and a CLI (`python3 -m hysys_bridge.casebook validate|run|ledger`). First case: `studies/cases/cumene-alkylator-feed-heater.json`. Changes from the plan: JSON instead of YAML (no dependency in this repo), and `scenarios` were added to the case record (named overrides, each with a stated reason, validated like the base case).
+
+Measured on the real DWSIM server (podman, `ghcr.io/danwbr/dwsim-mcp`), published duty 2.106e8 kJ/h (HYSYS, NRTL), 9 runs = 3 scenarios x 3 packages, all solved, no spec mismatches on read-back:
+
+| Package | Base duty, kJ/h | vs report | Propylene 0.00571 instead of 0.00574 | Mass flow from mole flow (+0.4%) |
+|---|---|---|---|---|
+| NRTL | 2.1768e8 | +3.4% | -0.004% | +0.400% |
+| Peng-Robinson | 2.0535e8 | -2.5% | -0.001% | +0.400% |
+| SRK | 2.1032e8 | -0.1% | -0.001% | +0.400% |
+
+Reading: the package spread (5.8 to 5.9% of the report value in every scenario) is about ten times the effect of either reconstruction uncertainty, so the unexplained 0.4% of stream makeup and the second propylene reading do not matter here; the package choice does. The mass-flow scenario moves the duty by exactly the flow change, as it should for a heater with the outlet temperature fixed. The base numbers equal the earlier hand run in `docs/MODEL_SCENARIOS.md`, which proves repeatability, not accuracy: accuracy is the comparison with the report, and a single case cannot settle it. The case stays at status `built`, not `verified`, because no person has reviewed the reconstructed composition (`review.human` is false).
+
+Limits: the 9 ledger rows carry git commit 39e3ec0, the commit before this code was committed; the case hash (36e597defef1) is the reliable link to what ran. One case only; no recycle, no multi-unit flowsheet yet.
+
+## 10. Testing plan
+Principles: a rule is only real if a planted fault breaks it; a check needs a positive control; verify before claiming; small steps, each ending green.
+
+| Layer | What | Where | Status |
+|---|---|---|---|
+| Unit, validator | One failing fixture per validation rule (15 planted faults: missing anchor, missing pressure basis, composition not summing to 1, reconstructed without check, verified without human review, bad targets, empty reported, missing licence, missing molar masses, scenario without a reason, bad override path, bad scenario composition, tolerance 0, bad reproduce block, unknown compound) | `hysys_bridge/tests/test_casebook.py` | Done |
+| Unit, conversion and compare | gauge to absolute, mass fractions sum to 1, scenario changes only its override and leaves the base untouched, tolerance edges, zero reference | same | Done |
+| Integration, fake transport | Runner over all scenarios and packages with a deterministic stand-in that returns an invented enthalpy; asserts the arithmetic and that a wrong answer is reported as outside tolerance (negative control) | same | Done; catches plumbing errors only, not thermodynamics |
+| Tool layer | Registration, path-traversal refusal, `DWSIM_MCP_CMD` required, ledger written only with `confirm=true` | same | Done |
+| Live, opt-in gate | Reproduce the hand-run package results within 1%, 9 of 9 solved | `python3 -m hysys_bridge.casebook run <case> --reproduce` | Done for the cumene case |
+| Regression, drift | Compare each new run with the last ledger row of the same case hash; flag changes over 1% | planned in `casebook/compare.py` | Not built |
+| Closure and sanity checks on extracted cases | Mass balance, duty equals enthalpy difference, composition sums | Phase 2 | Not built |
+| Independent oracle | A second source for the same case (another paper, vendor data, or the commercial tool) | Phase 3 | Not built |
+
+Scenario policy: a scenario varies a value inside its stated uncertainty and gives the reason in the case file; the property package is the other axis. Nothing is adjusted to hit a published number. Scenarios worth adding as soon as their cases are extracted: feed composition ranges for the oil and gas separation plant, part-load points for the CCGT cases, and stack temperature and heat-recovery settings for the boiler tools (analytic, no simulator needed).
