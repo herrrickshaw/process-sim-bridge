@@ -6,7 +6,9 @@ OUTSIDE this repo: simulations/optimisation.dwxmz, data/scaled_testplan.csv (100
 data/HYSYS_result.csv (paper's Aspen HYSYS results).
 The flowsheet is loaded in the DWSIM MCP container through a read-only mount; the paper's own objects and set-points are applied (it used DWSIM's
 automation API on Windows; we use dwsim_unitop_set / dwsim_stream_set_conditions / dwsim_solve_run). Object names differ: the paper's "01", "21", "63"
-are tags MSTR-01, MSTR-21, MSTR-63 here. The fourth output (vapour ratio) is not reproduced: the script text defining its denominator is cut off in the repo copy read.
+are tags MSTR-01, MSTR-21, MSTR-63 here. The fourth output (vapour ratio) = vapour-phase volumetric flow / OverallLiquid-phase volumetric flow of stream 63, as in the paper's script. DWSIM's MCP results give
+phase densities but not phase volumetric flows, so it is recovered from V_total = m/rho_mixture = m_v/rho_v + m_l/rho_l with m_v + m_l = m. NOTE the paper's script evaluates it in update_factors,
+BEFORE solving the case, so its published value for case i is the state left by case i-1 (row 0: the base file). We record both: vr_before (paper-faithful, read before applying case i) and vr_after (after solving case i).
 Needs numpy. Usage: python -u examples/andreasen_rerun.py <path-to-dwsim-paper-clone> [n_cases] [out.json] [case,case,...]
 With an explicit case list each case is solved after a FRESH load of the flowsheet (used to retry cases that failed in a long run).
 """
@@ -35,6 +37,13 @@ def apply(x):
     setu("20-HA-01",{"OutletTemperature":sep1t}); setu("VALV-01",{"OutletPressure":sep2p+0.5e5}); setu("VALV-02",{"OutletPressure":sep3p+0.5e5})
     setu("20-HA-03",{"OutletTemperature":sep3t}); setu("23-HA-01",{"OutletTemperature":s1}); setu("23-HA-02",{"OutletTemperature":s2}); setu("23-HA-03",{"OutletTemperature":s3})
     setu("23-KA-01",{"CalcMode":"Delta_P","DeltaP":boost-sep1p+1.5e5}); setu("25-HA-02",{"OutletTemperature":refrig})
+def vap_ratio():
+    r=c("dwsim_stream_get_results",flowsheet_id=fid,name="MSTR-63"); ph={p["name"]:p for p in r.get("phases",[])}
+    try:
+        rm,rv,rl=ph["Mixture"]["density_kg_m3"],ph["Vapor"]["density_kg_m3"],ph["OverallLiquid"]["density_kg_m3"]; m=r["mass_flow_kg_s"]
+        if min(rm,rv,rl)<=0: return float("nan")
+        mv=(m/rm-m/rl)/(1/rv-1/rl); return (mv/rv)/((m-mv)/rl)
+    except (KeyError,ZeroDivisionError): return float("nan")
 def outputs():
     r63=c("dwsim_stream_get_results",flowsheet_id=fid,name="MSTR-63"); r21=c("dwsim_stream_get_results",flowsheet_id=fid,name="MSTR-21")
     rvp=r63["pressure_Pa"]/1e5*14.5; crude=r21["molar_flow_mol_s"]*3.6
@@ -47,10 +56,13 @@ def outputs():
 out=[]
 for i in (CASES if CASES is not None else range(N)):
     if CASES is not None: fid=c("dwsim_flowsheet_load",filepath="/data/optimisation.dwxmz")["flowsheet_id"]     # fresh load per retried case
-    t0=time.time(); apply(X[i]); r=c("dwsim_solve_run",flowsheet_id=fid,timeout_s=300); ok=r.get("ok")
+    vr_before=vap_ratio(); t0=time.time(); apply(X[i]); r=c("dwsim_solve_run",flowsheet_id=fid,timeout_s=300); ok=r.get("ok")
     if not ok: r=c("dwsim_solve_run",flowsheet_id=fid,timeout_s=300); ok=r.get("ok")
+    if not ok:                                       # as the paper's script does: reload the file and solve again
+        fid=c("dwsim_flowsheet_load",filepath="/data/optimisation.dwxmz")["flowsheet_id"]; apply(X[i]); r=c("dwsim_solve_run",flowsheet_id=fid,timeout_s=300); ok=r.get("ok")
     crude,pw,rvp,det=outputs() if ok else (np.nan,np.nan,np.nan,{})
-    out.append((ok,crude,pw,rvp))
+    vr_after=vap_ratio() if ok else float("nan")
+    out.append((ok,crude,pw,rvp,vr_before,vr_after))
     print(f"case {i}: solved={ok} ({time.time()-t0:.1f}s) crude {crude:.1f} (paper {REF[i,0]:.1f}) | power {pw:.0f} (paper {REF[i,1]:.0f}, HYSYS {HYS[i,1]:.0f}) | RVP {rvp:.3f} (paper {REF[i,2]:.3f}, HYSYS {HYS[i,2]:.3f})")
     json.dump(out,open(OUT,"w"))
     sys.stdout.flush()
