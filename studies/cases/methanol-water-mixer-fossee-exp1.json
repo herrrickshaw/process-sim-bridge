@@ -1,0 +1,203 @@
+{
+ "id": "methanol-water-mixer-fossee-exp1",
+ "source": {
+  "title": "SASTRA FOSSEE 'Process Simulation Using DWSIM' (Naren, v02, Dec 2017), Experiment 1",
+  "doi": null,
+  "url": "https://primary.fossee.in/dwsim/manuals/SASTRA-FOSSEE-DWSIM-v02-30Dec17.pdf",
+  "licence": "none seen on the document (index row licence_hint none-seen); facts only",
+  "use": "facts-only (specification and structure); no text or figures copied",
+  "read": "full-text",
+  "fetch_route": "fetch_source.py, one GET after robots.txt allowed; text layer read in full (58 pages)",
+  "note": "the results table in the manual is an image; the numbers below are an exact mole balance, not transcribed values"
+ },
+ "basis": {
+  "compounds": [
+   "Methanol",
+   "Water"
+  ],
+  "package_in_paper": "Raoult's Law",
+  "packages": [
+   "Raoult's Law",
+   "NRTL",
+   "Peng-Robinson"
+  ],
+  "composition_basis": "mole",
+  "molar_mass_g_mol": {
+   "Methanol": 32.04216,
+   "Water": 18.01527
+  },
+  "molar_mass_source": "CoolProp 7 molar masses (independent of DWSIM's own database)",
+  "enthalpy_reference": "not used; the manual says the streams are ideal, so no enthalpy of mixing and the outlet stays at 30 C"
+ },
+ "streams": [
+  {
+   "id": "INLET_1",
+   "role": "feed",
+   "src": null,
+   "dst": "MIX",
+   "T": {
+    "value": 30.0,
+    "unit": "C",
+    "anchor": "FOSSEE DWSIM manual Exp 1: 30 C"
+   },
+   "P": {
+    "value": 100.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "FOSSEE DWSIM manual Exp 1: 1 bar"
+   },
+   "mass_flow": {
+    "value": 388.3591,
+    "unit": "kg/h",
+    "anchor": "FOSSEE DWSIM manual Exp 1: 20 kmol/h converted to mass with the stated molar masses"
+   },
+   "composition": {
+    "values": {
+     "Methanol": 0.1,
+     "Water": 0.9
+    },
+    "provenance": {
+     "Methanol": "reported",
+     "Water": "reported"
+    }
+   }
+  },
+  {
+   "id": "INLET_2",
+   "role": "feed",
+   "src": null,
+   "dst": "MIX",
+   "T": {
+    "value": 30.0,
+    "unit": "C",
+    "anchor": "FOSSEE DWSIM manual Exp 1: 30 C"
+   },
+   "P": {
+    "value": 100.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "FOSSEE DWSIM manual Exp 1: 1 bar"
+   },
+   "mass_flow": {
+    "value": 292.3678,
+    "unit": "kg/h",
+    "anchor": "FOSSEE DWSIM manual Exp 1: 10 kmol/h converted to mass with the stated molar masses"
+   },
+   "composition": {
+    "values": {
+     "Methanol": 0.8,
+     "Water": 0.2
+    },
+    "provenance": {
+     "Methanol": "reported",
+     "Water": "reported"
+    }
+   }
+  },
+  {
+   "id": "OUTLET",
+   "role": "product",
+   "src": "MIX",
+   "dst": null
+  }
+ ],
+ "units": [
+  {
+   "id": "MIX",
+   "type": "mixer"
+  }
+ ],
+ "reported": [
+  {
+   "name": "outlet_mass",
+   "kind": "stream_mass_kg_h",
+   "target": "OUTLET",
+   "value": 680.727,
+   "unit": "kg/h",
+   "anchor": "FOSSEE DWSIM manual Exp 1: outlet flow; exact mass balance of the two inlets",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "outlet_methanol_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "OUTLET",
+   "value": 0.470705,
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 1: outlet composition: 10 kmol/h methanol in 30 kmol/h = 1/3 mole fraction, converted to mass fraction",
+   "precision": "exact",
+   "compound": "Methanol",
+   "pass_rel": 0.001
+  },
+  {
+   "name": "outlet_T",
+   "kind": "stream_T_C",
+   "target": "OUTLET",
+   "value": 30.0,
+   "unit": "C",
+   "anchor": "FOSSEE DWSIM manual Exp 1: ideal liquids: zero enthalpy of mixing, so the equal-temperature inlets give 30 C",
+   "precision": "independent calculation",
+   "pass_rel": 0.003
+  },
+  {
+   "name": "outlet_P",
+   "kind": "stream_P_kPa",
+   "target": "OUTLET",
+   "value": 100.0,
+   "unit": "kPa",
+   "anchor": "FOSSEE DWSIM manual Exp 1: 1 bar, equal inlet pressures",
+   "precision": "independent calculation",
+   "pass_rel": 0.001
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.001,
+  "note": "mass balance is exact; temperature allows 0.09 K. NRTL and Peng-Robinson are listed to see what a non-ideal package does to the outlet temperature (the manual's second self-learning question); the observed result is recorded in the architecture doc"
+ },
+ "scenarios": [
+  {
+   "id": "pure-methanol-stream-2",
+   "why": "the manual's first self-learning question: stream 2 becomes pure methanol (10 kmol/h); balance gives 12 kmol/h methanol in 30 kmol/h",
+   "overrides": [
+    {
+     "stream": "INLET_2",
+     "path": [
+      "composition",
+      "values"
+     ],
+     "set": {
+      "Methanol": 1.0,
+      "Water": 0.0
+     }
+    },
+    {
+     "stream": "INLET_2",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 320.4216
+    },
+    {
+     "reported": "outlet_mass",
+     "path": [
+      "value"
+     ],
+     "set": 708.7807
+    },
+    {
+     "reported": "outlet_methanol_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.542489
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "exact mole and mass balance; molar masses from CoolProp; no published numbers (results table is an image)",
+  "human": false
+ },
+ "status": "built"
+}

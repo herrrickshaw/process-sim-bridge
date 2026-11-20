@@ -248,3 +248,36 @@ Two things found along the way:
 - **The sign of the heater's pressure-drop parameter** (a drop is sent as a positive `DeltaP`) is now covered by a test and a mutant that flips it is caught. The live pressure-drop runs match the independent duties with Steam Tables to -0.032%, the same as without a drop.
 
 Casebook changes: reference kind `units_duty_sum_kJ_h` (net duty over several units); source `read: computed` for a reference that is a calculation, not a document. Mutation check: 5 of 5 new mutants and all 46 validator rules caught. Ledger: 15 and 9 rows (hashes 10ff22c8381c and 429e5cc26ffe). Both cases stay at `built` until a person reviews them.
+
+## 17. Phase 1, cases 7 to 9: the FOSSEE DWSIM manual (read and built 2026-11-21)
+
+Source: SASTRA FOSSEE Centre, "Process Simulation Using DWSIM" (Naren, v02, December 2017, DWSIM 5.1 Classic UI), eleven basic exercises, fetched once with `fetch_source.py` (robots.txt allowed) and read in full as text. **The results tables in the manual are images, so the document gives specifications but no readable expected numbers.** Every reference below is therefore an independent calculation (CoolProp 7), not a transcribed value, and each case says so in `source.note`. Licence: none seen on the document; only facts (specifications) are used, no text or figures.
+
+| Exp | Manual title | Status | Reference |
+|---|---|---|---|
+| 1 | Mixing of ideal liquid streams | built, run | exact mole and mass balance, ideal mixing keeps 30 C |
+| 7 | Simulation of a flash column | built, run | Rachford-Rice with CoolProp vapour pressures |
+| 9 | Determination of heat duty of heater | built, run | CoolProp IAPWS-95 enthalpy difference |
+| 2, 3 | Pure-component properties, binary VLE | not built | property-viewer and Binary Envelope utilities, not flowsheet units |
+| 4, 5, 6 | Equilibrium, conversion, CSTR reactors | not built | the case schema has no reactions yet (see below) |
+| 8 | Shortcut column | not built | server unit exists; reference would be Fenske-Underwood-Gilliland, needs a relative volatility choice |
+| 10 | Heater and cooler as heat exchanger (styrene and toluene) | not built | no independent oracle: styrene is not in CoolProp; the manual links the heater to the cooler's energy stream, which our IR cannot express |
+| 11 | Rigorous shell-and-tube exchanger | not built | needs exchanger geometry parameters; unit not driven |
+
+### Results on the real DWSIM server (podman, `ghcr.io/danwbr/dwsim-mcp`)
+All 26 runs solved, no findings, no spec mismatches on read-back. Ledger rows 6, 8 and 12 (hashes c97415f5341b, 63439bbbbf22, 6a840512eaea).
+
+**Exp 1, methanol/water mixer (2 scenarios x 3 packages).** Mass flow and mass fraction exact in every package. Outlet temperature: Raoult's Law 30.0 C and NRTL 30.0 C (NRTL gave no mixing heat effect in this server, so it does not answer the manual's "what if enthalpy of mixing is not negligible"); Peng-Robinson 28.2 C (-6.1%) and 27.5 C with pure methanol as stream 2 (-8.3%). Paper package within tolerance; not every package.
+
+**Exp 9, water heater (2 scenarios x 4 packages).** 50 kg/h, 25 to 90 C, independent duty 13,607 kJ/h (3.78 kW). Steam Tables -0.0%, Peng-Robinson +8.0%, SRK +15.1%, **Raoult's Law +1.4%, outside the 1% tolerance I fixed before the run, so the paper's own package does not pass.** I did not loosen it. The smaller rise to 60 C passes for Raoult's Law (+0.05%), so the miss grows with temperature, consistent with a liquid heat-capacity correlation that drifts from IAPWS-95 (a reading, not tested here).
+
+**Exp 7, pentane/hexane/heptane flash (4 scenarios x 3 packages).** Independent ideal vapour fraction 0.4330 (mole basis) at 69 C and 101.3 kPa; Raoult's Law gives 0.4353 (+0.5%), vapour and liquid flows within 0.5%, pentane fractions within 0.9%, all inside 3%. The manual's self-learning question 1 (SRK or PR instead): PR -4.9% and SRK -3.1% on the vapour fraction, liquid pentane fraction +3.3% and +4.4%, so both fail the 3% bound and are recorded as expected package differences. Question 2 became three scenarios: below the ideal dew pressure (77.03 kPa, run at 70 kPa), above the ideal dew temperature (77.38 C, run at 80 C), and above the ideal bubble pressure (126.73 kPa, run at 140 kPa); all three phase calls and the single-phase compositions match in every package.
+
+### What the cases needed
+Nothing in the casebook code changed except the test fake (it now knows Raoult's Law and N-pentane). New knowledge about the server: the property package list includes "Raoult's Law" (passed through by name); the compound names are `N-pentane`, `N-hexane`, `N-heptane` (a first run with CoolProp's spelling `n-Pentane` failed loudly with a key error, which is the intended behaviour); 1,621 compounds, styrene present.
+
+### Why the reactor exercises are next, and what they need
+Exercises 4 to 6 would be the first reactor cases and have simple references: Exp 5 is a mole balance (25 kmol/h N2 at 20% conversion leaves 20 N2, 60 H2, 10 NH3, 90 kmol/h in total); Exp 6 is a first-order CSTR (k = 0.005 1/s, V = 2 m3 at 26 m3/h gives tau 276.9 s and conversion k*tau/(1+k*tau) = 0.581). They need a reactions block in the case schema, a reaction-set mapping to `dwsim_reaction_add_conversion` and `dwsim_reactionset_create`, and the ConversionReactor and CSTR unit parameters, none of which are verified. Exp 4 also needs an equilibrium constant that is not in the manual; a correlation would be an assumption to flag.
+
+### Tests
+`Fossee` class in `test_casebook.py` (5 tests; 47 casebook tests pass): validity and source, mixer reference equals the mole balance, flash reference satisfies the mass and pentane balances, scenarios validate, heater tolerance recorded as fixed before the run. A hand mutant that adds 40 kg/h to the reference vapour flow is caught. Cases stay at `built` (not human-reviewed).

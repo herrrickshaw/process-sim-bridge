@@ -417,6 +417,42 @@ class HeaterCooler(unittest.TestCase):
         self.assertAlmostEqual(sets["C"]["DeltaP"], 0.0)
 
 
+FOSSEE = ["methanol-water-mixer-fossee-exp1", "water-heater-raoult-fossee-exp9", "pentane-hexane-heptane-flash-fossee-exp7"]
+def _fossee(i): return schema.load(os.path.join(os.path.dirname(CASE), i + ".json"))
+
+
+class Fossee(unittest.TestCase):
+    """Cases built from the FOSSEE DWSIM manual (Exp 1, 7, 9). The manual's results are images, so every reference is an independent calculation; these tests check the case records themselves."""
+    def test_all_validate_and_cite_the_manual(self):
+        for i in FOSSEE:
+            c = _fossee(i); self.assertEqual(schema.validate(c), [], i)
+            self.assertIn("fossee.in", c["source"]["url"]); self.assertEqual(c["basis"]["package_in_paper"], "Raoult's Law"); self.assertFalse(c["review"]["human"])
+
+    def test_mixer_reference_is_the_mole_balance(self):
+        c = _fossee(FOSSEE[0]); mm = c["basis"]["molar_mass_g_mol"]; f = {s["id"]: s for s in c["streams"]}
+        kmol = lambda s: s["mass_flow"]["value"] / sum(x * mm[k] for k, x in s["composition"]["values"].items())
+        self.assertAlmostEqual(kmol(f["INLET_1"]), 20, delta=1e-3); self.assertAlmostEqual(kmol(f["INLET_2"]), 10, delta=1e-3)
+        r = {x["name"]: x["value"] for x in c["reported"]}
+        self.assertAlmostEqual(r["outlet_mass"], f["INLET_1"]["mass_flow"]["value"] + f["INLET_2"]["mass_flow"]["value"], delta=1e-3)
+        self.assertAlmostEqual(r["outlet_methanol_mass_fraction"], 10 * mm["Methanol"] / r["outlet_mass"], places=5)
+
+    def test_flash_reference_satisfies_its_own_balances(self):
+        c = _fossee(FOSSEE[2]); r = {x["name"]: x["value"] for x in c["reported"]}; mm = c["basis"]["molar_mass_g_mol"]
+        self.assertAlmostEqual(r["vapor_mass_flow"] + r["liquid_mass_flow"], r["outlet_mass_sum"], delta=0.05)     # a transcription slip in either flow breaks this
+        z = c["streams"][0]["composition"]["values"]; ideal = 100 * sum(x * mm[k] for k, x in z.items())
+        self.assertAlmostEqual(c["streams"][0]["mass_flow"]["value"], ideal, delta=0.01)
+        wf = z["N-pentane"] * mm["N-pentane"] / sum(x * mm[k] for k, x in z.items())     # component balance on pentane
+        self.assertAlmostEqual(r["vapor_pentane_mass_fraction"] * r["vapor_mass_flow"] + r["liquid_pentane_mass_fraction"] * r["liquid_mass_flow"], wf * r["outlet_mass_sum"], delta=2.0)
+
+    def test_flash_scenarios_cover_dew_and_bubble(self):
+        c = _fossee(FOSSEE[2])
+        for sid, field, value in (("below-dew-pressure", "P", 70.0), ("above-dew-temperature", "T", 80.0), ("above-bubble-pressure", "P", 140.0)):
+            s = schema.apply_scenario(c, sid); self.assertEqual(schema.validate(s), [], sid); self.assertEqual(s["streams"][0][field]["value"], value)
+
+    def test_heater_tolerance_was_fixed_before_the_run(self):
+        c = _fossee(FOSSEE[1]); self.assertEqual(c["tolerance"]["pass_rel"], 0.01); self.assertIn("fixed before the run", c["tolerance"]["note"])
+
+
 class Ledger(unittest.TestCase):
     def test_append_and_read_are_additive(self):
         with tempfile.TemporaryDirectory() as d:
