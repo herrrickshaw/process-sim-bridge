@@ -58,6 +58,37 @@ class Utilities(unittest.TestCase):
         self.assertTrue(call("utilities_balance", air_nm3_h=100.0)[0])                                                  # header pressure missing
         self.assertTrue(call("utilities_balance", steam_duty_kW=1000.0, steam_P_kPa=1000.0)[0])                          # return fraction missing: not guessed
 
+    def test_minimum_separation_work_against_the_closed_form(self):
+        from hysys_bridge import utilities_link as U
+        x = U.X_N2_AIR; T = 298.15
+        w, w_nm3, n_p = U.min_separation_work(1.0, 1.0, T)                                   # pure N2, all of it recovered: -RT sum x ln x per mol of air
+        self.assertAlmostEqual(w, -U.R_GAS * T * (x * math.log(x) + (1 - x) * math.log(1 - x)), places=6); self.assertAlmostEqual(n_p, x)
+        self.assertAlmostEqual(w_nm3, w / x * U.NM3_MOL)
+        self.assertGreater(U.min_separation_work(0.999, 0.5)[1], 0)
+        w_hi = U.min_separation_work(0.999, 0.95)[1]; self.assertGreater(w_hi, U.min_separation_work(0.99, 0.95)[1])      # purer product costs more
+        for bad in ((0.5, 0.9), (1.0, 0.0), (0.99, 1.5)):
+            with self.assertRaises(ValueError): U.min_separation_work(*bad)
+
+    @unittest.skipUnless(HAVE, "needs CoolProp")
+    def test_nitrogen_generation_routes(self):
+        base = dict(product_nm3_h=1000.0, purity=0.995, delivery_P_kPa=800.0)
+        err, p = call("utility_nitrogen_generation", method="psa", n2_recovery=0.45, feed_P_kPa=800.0, **base); self.assertFalse(err, p)
+        self.assertAlmostEqual(p["feed_air_nm3_h"], 1000.0 * 0.995 / (0.45 * 0.7808)); self.assertAlmostEqual(p["waste_nm3_h"], p["feed_air_nm3_h"] - 1000.0)
+        self.assertAlmostEqual(p["electric_kW"], sum(x["shaft_power_kW"] for x in p["stages"])); self.assertGreater(p["electric_kW"], p["min_work_kW"])
+        self.assertLess(p["implied_second_law_eff"], 1.0)
+        c = call("utility_nitrogen_generation", method="cryogenic", **base)[1]; self.assertIn("second_law_eff", c["assumed_defaults"])
+        self.assertAlmostEqual(c["electric_kW"], c["min_work_kW"] / 0.25 + c["stages"][0]["shaft_power_kW"])
+        hi = call("utility_nitrogen_generation", method="psa", n2_recovery=0.3, feed_P_kPa=800.0, **base)[1]; self.assertGreater(hi["electric_kW"], p["electric_kW"])   # lower recovery, more feed air
+        self.assertTrue(call("utility_nitrogen_generation", method="psa", feed_P_kPa=800.0, **base)[0])               # PSA recovery is vendor data: required, not defaulted
+        for bad in (dict(method="cryogenic", purity=0.5), dict(method="cryogenic", n2_recovery=1.5), dict(method="distillation")):
+            self.assertTrue(call("utility_nitrogen_generation", **{**base, **bad})[0])
+
+    @unittest.skipUnless(HAVE, "needs CoolProp")
+    def test_balance_uses_generation_when_asked(self):
+        err, r = call("utilities_balance", n2_nm3_h=1000.0, n2_P_out_kPa=800.0, n2_method="psa", n2_purity=0.995, n2_recovery=0.45, n2_feed_P_kPa=800.0); self.assertFalse(err, r)
+        self.assertAlmostEqual(r["summary"]["compressor_shaft_kW"], r["nitrogen"]["electric_kW"]); self.assertAlmostEqual(r["summary"]["cooling_duty_kW"], r["nitrogen"]["cooling_duty_kW"])
+        self.assertEqual(r["nitrogen"]["method"], "psa")
+
 
 if __name__ == "__main__":
     unittest.main()

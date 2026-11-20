@@ -17,13 +17,14 @@ Utilities are modelled as **consumers of the process**, not as simulated plants:
 | **Demin water** | steam not returned as condensate + boiler blowdown (`utility_demin_water`) | make-up, raw water to the demin plant at a given recovery, reject | resin/membrane design, regeneration chemicals, condensate polishing, deaerator vent loss, blowdown flash recovery |
 | **Cooling water** | cooler, condenser and compressor-cooler duties (`utility_cooling_water`) | circulation flow from duty and temperature rise; with a tower: evaporation, blowdown, drift, make-up from cycles of concentration | tower thermal rating (approach to wet bulb), water treatment, pump head, fouling |
 | **Plant / instrument air** | Nm3/h demand, header pressure, optional dryer purge (`utility_compressed_gas`) | multistage intercooled compression power, stage temperatures, cooler duty | dryer type and dew point, receiver sizing, filtration, distribution losses |
-| **Nitrogen** | Nm3/h demand, header pressure | compression of the supplied nitrogen, same model | generation (PSA/membrane/cryogenic or liquid vaporiser) energy and purity, blanketing and purge rates, vent recovery |
+| **Nitrogen** | Nm3/h demand, purity, header pressure | `utility_nitrogen_generation`: PSA and membrane (feed air from your recovery, compression, booster), cryogenic (reversible work over a second-law efficiency); the reversible minimum and implied second-law efficiency are always shown; `utility_compressed_gas` compresses supplied nitrogen | PSA/membrane recovery (vendor data, required, no default), air purification/dryer duty, vacuum regeneration, liquid-N2 backup and vaporiser, blanketing and purge rates, vent recovery |
 `utilities_balance` runs the pieces together for one plant demand and returns each system plus a summary (steam kg/h, demin make-up, compressor kW, cooling duty and water, tower make-up).
 
 ## 3. Balances used
 - Steam: `m = Q / (h_in - h_condensate)`, CoolProp IAPWS-95; condensing at `steam_P_kPa` to `condensate_T_C` (default saturated liquid).
 - Demin: `make-up = steam x (1 - return fraction) + boiler steam x blowdown%`; `raw water = make-up / recovery`.
 - Cooling water: `m = Q / (cp dT)`; tower: `evaporation = evaporative fraction x Q / h_fg`, `makeup = evaporation + blowdown + drift`, and a salt balance `makeup = COC x (blowdown + drift)`, so `blowdown + drift = evaporation / (COC - 1)`.
+- Nitrogen generation: reversible work from ideal-mixture unmixing (N2 vs lumped O2+Ar, isothermal): 0.0207 kWh per Nm3 of pure N2 at full recovery, checked against the closed form; PSA/membrane feed air = N2 product x purity / (recovery x 0.7808); cryogenic electricity = reversible work / second-law efficiency (assumed).
 - Compression: `n = ceil(ln(Pout/Pin) / ln(max ratio))` equal-ratio stages, real-gas isentropic enthalpy rise per stage divided by an isentropic efficiency, cooled back to `T_ic` between stages (and after the last unless switched off); shaft = gas power / mechanical efficiency; cooler duty = enthalpy removed.
 
 ## 4. How the utilities meet the simulators
@@ -37,7 +38,7 @@ Utilities are modelled as **consumers of the process**, not as simulated plants:
 - Not checked against any vendor or plant data. Treat results as screening-level.
 
 ## 6. Open items (in priority order)
-1. Nitrogen generation: PSA, membrane and cryogenic energies per Nm3 and purity trade-offs; liquid N2 vaporiser duty.
+1. Nitrogen: vendor recovery-versus-purity curves for PSA and membranes, liquid N2 vaporiser duty, and the cryogenic second-law efficiency (the 0.25 default is a placeholder).
 2. Air dryer and dew-point design (purge fraction by dryer type is now only an input).
 3. Header hydraulics and pressure levels, including steam letdown and desuperheating; relief of each header (the toolkit link `safety_relief_gas` can size gas headers).
 4. Cooling-tower thermal rating against wet-bulb; closed-loop versus once-through cooling.

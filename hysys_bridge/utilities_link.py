@@ -62,6 +62,63 @@ def t_compressed_gas(a):
     return out
 
 
+X_N2_AIR = 0.7808            # dry-air N2 mole fraction (CoolProp's Air mixture uses 0.7812; the difference is immaterial here)
+R_GAS = 8.314462618
+NM3_MOL = 101325.0 / (R_GAS * 273.15)
+
+
+def min_separation_work(product_purity, n2_recovery, T_K=298.15):
+    """Reversible (minimum) work to split air (N2 + 'other' = O2 and Ar lumped) into a product of N2 purity y (mole fraction) at N2 recovery R and a waste stream.
+    Ideal-gas mixtures, isothermal, every stream at the same pressure: W = RT [sum_out n_k sum_i x_ik ln x_ik - sum_i x_i,air ln x_i,air] per mol of air.
+    Returns (J per mol of air, J per Nm3 of product, product mol per mol air)."""
+    y, R = product_purity, n2_recovery
+    if not (X_N2_AIR < y <= 1.0): raise ValueError(f"product purity must exceed air's N2 fraction ({X_N2_AIR}) and be <= 1")
+    if not (0 < R <= 1): raise ValueError("N2 recovery must be in (0, 1]")
+    n_p = X_N2_AIR * R / y; n_w = 1 - n_p
+    oth_w = (1 - X_N2_AIR) - n_p * (1 - y); n2_w = X_N2_AIR * (1 - R)
+    def ent(n_a, n_b):                                    # n * sum x ln x for a two-component stream
+        t = n_a + n_b
+        return 0.0 if t <= 1e-15 else sum(n * math.log(n / t) for n in (n_a, n_b) if n > 1e-15)
+    w = R_GAS * T_K * (ent(n_p * y, n_p * (1 - y)) + ent(n2_w, max(oth_w, 0.0)) - ent(X_N2_AIR, 1 - X_N2_AIR))
+    return w, w / n_p * NM3_MOL, n_p
+
+
+def t_n2_generation(a):
+    """Electricity for on-site nitrogen. PSA/membrane: feed air compressed to feed_P_kPa, product leaves at feed_P less a drop and is boosted to the header;
+    feed air = N2 product x purity / (recovery x 0.7808). Cryogenic: reversible work / second-law efficiency (an assumption), product compressed from product_P_kPa.
+    Every route also reports the reversible minimum so the implied second-law efficiency of the figure you get is visible."""
+    asm = {}; m = str(a.get("method", "")).lower()
+    if m not in ("psa", "membrane", "cryogenic"): raise ValueError("method must be psa, membrane or cryogenic")
+    nm3 = _num(a, "product_nm3_h", lo=0.0); y = _num(a, "purity", lo=0.8, hi=1.0); P_out = _num(a, "delivery_P_kPa", lo=101.325); T0 = _num(a, "ambient_T_C", 25.0, assumed=asm)
+    eta_mech = _num(a, "eta_mech", 0.95, 0.01, 1.0, asm); eta_is = _num(a, "eta_is", 0.75, 0.01, 1.0, asm)
+    if m == "cryogenic": R = _num(a, "n2_recovery", 0.95, 0.05, 1.0, asm)
+    else: R = _num(a, "n2_recovery", lo=0.05, hi=1.0)                         # PSA/membrane recovery falls as purity rises and is vendor data: not defaulted
+    w_min_mol, w_min_nm3, n_p = min_separation_work(y, R, T0 + 273.15)
+    w_min_kwh_nm3 = w_min_nm3 / 3.6e6
+    feed_air = nm3 * y / (R * X_N2_AIR); out = {"method": m, "product_nm3_h": nm3, "purity": y, "n2_recovery": R, "feed_air_nm3_h": feed_air, "waste_nm3_h": feed_air - nm3,
+                                                "min_work_kWh_per_Nm3_product": w_min_kwh_nm3, "min_work_kW": w_min_kwh_nm3 * nm3, "cooling_duty_kW": 0.0, "stages": []}
+    if m in ("psa", "membrane"):
+        P_feed = _num(a, "feed_P_kPa", lo=150.0); dp = _num(a, "product_dp_kPa", 50.0, 0.0, assumed=asm)
+        c1 = compress("air", feed_air, 101.325, P_feed, T_in_C=T0, eta_is=eta_is, eta_mech=eta_mech, aftercool=True)
+        P_prod = P_feed - dp; kw = c1["shaft_power_kW"]; q = c1["cooling_duty_kW"]; out["stages"].append({"what": "feed air compression", **{k: c1[k] for k in ("shaft_power_kW", "cooling_duty_kW", "stages")}})
+        if P_out > P_prod:
+            c2 = compress("nitrogen", nm3, P_prod, P_out, T_in_C=T0, eta_is=eta_is, eta_mech=eta_mech, aftercool=True); kw += c2["shaft_power_kW"]; q += c2["cooling_duty_kW"]
+            out["stages"].append({"what": "product booster", **{k: c2[k] for k in ("shaft_power_kW", "cooling_duty_kW", "stages")}})
+        out.update({"product_P_kPa_from_unit": P_prod, "electric_kW": kw, "cooling_duty_kW": q, "note": "air dryer/purification duty, vacuum regeneration and membrane module pressure drop are not included; recovery is your input (vendor data)"})
+    else:
+        eta2 = _num(a, "second_law_eff", 0.25, 0.02, 1.0, asm); P_prod = _num(a, "product_P_kPa", 101.325, 101.325, assumed=asm)
+        kw = w_min_kwh_nm3 * nm3 / eta2; q = 0.0
+        if P_out > P_prod:
+            c2 = compress("nitrogen", nm3, P_prod, P_out, T_in_C=T0, eta_is=eta_is, eta_mech=eta_mech, aftercool=True); kw += c2["shaft_power_kW"]; q = c2["cooling_duty_kW"]
+            out["stages"].append({"what": "product compression", **{k: c2[k] for k in ("shaft_power_kW", "cooling_duty_kW", "stages")}})
+        out.update({"second_law_eff": eta2, "product_P_kPa_from_unit": P_prod, "electric_kW": kw, "cooling_duty_kW": q,
+                    "note": "second-law efficiency is an ASSUMPTION covering the whole cycle (air compression, purification, heat exchange, column); liquid-nitrogen backup and vaporiser are not included"})
+    out["specific_kWh_per_Nm3"] = out["electric_kW"] / nm3
+    out["implied_second_law_eff"] = out["min_work_kW"] / out["electric_kW"] if out["electric_kW"] else None      # on TOTAL electricity, product compression included
+    out["assumed_defaults"] = asm
+    return out
+
+
 def t_cooling_water(a):
     CP = _cp(); asm = {}
     kw = _num(a, "duty_kW", lo=0.0); Ts, Tr = _num(a, "supply_T_C", 30.0, assumed=asm), _num(a, "return_T_C", 40.0, assumed=asm)
@@ -99,6 +156,12 @@ def t_balance(a):
         res["demin"] = t_demin_water({"steam_kg_h": st["steam_kg_h"], "condensate_return_fraction": _num(a, "condensate_return_fraction", lo=0.0, hi=1.0),
                                       **{k: a[k] for k in ("blowdown_pct", "demin_recovery", "boiler_steam_kg_h") if k in a}})
     for key, gas in (("air_nm3_h", "air"), ("n2_nm3_h", "nitrogen")):
+        if key in a and gas == "nitrogen" and "n2_method" in a:
+            hdr = a.get("n2_P_out_kPa")
+            if hdr is None: raise ValueError("n2_P_out_kPa (header pressure, kPa abs) is required with n2_nm3_h")
+            sub = {dst: a[src] for src, dst in (("n2_purity", "purity"), ("n2_recovery", "n2_recovery"), ("n2_feed_P_kPa", "feed_P_kPa"), ("n2_second_law_eff", "second_law_eff")) if src in a}
+            r = t_n2_generation({**sub, "method": a["n2_method"], "product_nm3_h": a[key], "delivery_P_kPa": hdr})
+            res["nitrogen"] = {**r, "shaft_power_kW": r["electric_kW"]}; elec += r["electric_kW"]; cw_duty += r["cooling_duty_kW"]; continue
         if key in a:
             hdr = a[("air" if gas == "air" else "n2") + "_P_out_kPa"] if (("air" if gas == "air" else "n2") + "_P_out_kPa") in a else None
             if hdr is None: raise ValueError(f"{'air' if gas == 'air' else 'n2'}_P_out_kPa (header pressure, kPa abs) is required with {key}")
@@ -118,6 +181,9 @@ def _s(props, req): return {"type": "object", "properties": props, "required": r
 _n = {"type": "number"}
 
 TOOLS = {
+    "utility_nitrogen_generation": (t_n2_generation, "Electricity and cooling for on-site nitrogen by psa, membrane or cryogenic route: feed air (PSA/membrane) or reversible work over a second-law efficiency (cryogenic), product booster, and the reversible minimum with the implied second-law efficiency. PSA/membrane need your recovery (vendor data); cryogenic defaults (recovery 0.95, second-law efficiency 0.25) are assumptions listed in the result.",
+                                    _s({"method": {"type": "string"}, "product_nm3_h": _n, "purity": _n, "delivery_P_kPa": _n, "n2_recovery": _n, "feed_P_kPa": _n, "product_dp_kPa": _n, "second_law_eff": _n,
+                                        "product_P_kPa": _n, "ambient_T_C": _n, "eta_is": _n, "eta_mech": _n}, ["method", "product_nm3_h", "purity", "delivery_P_kPa"])),
     "utility_compressed_gas": (t_compressed_gas, "Size multistage intercooled compression of plant/instrument air or nitrogen (flow in Nm3/h, suction and header pressure kPa abs): shaft kW, stage temperatures, cooler duty. CoolProp real-gas stages; efficiencies are assumed defaults listed in the result; N2 generation energy not included.",
                                _s({"gas": {"type": "string"}, "nm3_h": _n, "P_in_kPa": _n, "P_out_kPa": _n, "T_in_C": _n, "T_ic_C": _n, "eta_is": _n, "eta_mech": _n, "max_ratio": _n, "aftercool": {"type": "boolean"}, "ic_dp_frac": _n, "dryer_purge_fraction": _n},
                                   ["gas", "nm3_h", "P_in_kPa", "P_out_kPa"])),
@@ -128,5 +194,6 @@ TOOLS = {
     "utilities_balance": (t_balance, "One consistent utility balance: steam for a heat duty (condensing at steam_P_kPa), its demin make-up, compressed air and nitrogen to header pressures, and the cooling water for compressor coolers plus other duties incl. tower make-up. Returns each system and a summary of steam, make-up, electricity and cooling.",
                           _s({"steam_duty_kW": _n, "steam_P_kPa": _n, "condensate_T_C": _n, "condensate_return_fraction": _n, "blowdown_pct": _n, "demin_recovery": _n, "boiler_steam_kg_h": _n,
                               "air_nm3_h": _n, "air_P_out_kPa": _n, "air_dryer_purge_fraction": _n, "n2_nm3_h": _n, "n2_P_out_kPa": _n, "suction_P_kPa": _n,
+                              "n2_method": {"type": "string"}, "n2_purity": _n, "n2_recovery": _n, "n2_feed_P_kPa": _n, "n2_second_law_eff": _n,
                               "other_cooling_duty_kW": _n, "supply_T_C": _n, "return_T_C": _n, "cycles_of_concentration": _n}, [])),
 }
