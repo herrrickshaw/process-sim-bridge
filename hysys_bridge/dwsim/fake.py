@@ -5,7 +5,7 @@ tests/test_dwsim_live.py runs the same backend against the real server."""
 from __future__ import annotations
 from .backend import TOOLS
 
-KNOWN = {"Water", "Ethanol", "Methanol", "Benzene", "Toluene", "Methane"}
+KNOWN = {"Water", "Ethanol", "Methanol", "Benzene", "Toluene", "Methane", "Propane", "N-butane", "N-hexane", "N-heptane", "N-octane", "N-decane", "N-dodecane"}  # last seven verified live 2026-11-20
 PACKAGES = {"Peng-Robinson (PR)", "Soave-Redlich-Kwong (SRK)", "NRTL", "Steam Tables (IAPWS-IF97)"}
 REQ = {"create": set(), "add_compounds": {"flowsheet_id", "names"}, "set_package": {"flowsheet_id", "name"},
        "add_stream": {"flowsheet_id", "name"}, "add_unitop": {"flowsheet_id", "type", "name"}, "unitop_set": {"flowsheet_id", "name", "properties"},

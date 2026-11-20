@@ -39,6 +39,32 @@ def t_run(a):
             "warnings": r.warnings, "basis": "screening correlations, not a rigorous simulation"}
 
 
+# ILLUSTRATIVE surrogate compounds (mass fractions) for the lumped pools: the refinery model carries cuts, not compounds, so any DWSIM
+# case built from a pool is only as good as this choice. Returned with every result; pass `surrogate` to override.
+SURROGATES = {"lpg": {"Propane": 0.4, "N-butane": 0.6},
+              "gasoline_range": {"N-hexane": 0.4, "N-heptane": 0.35, "N-octane": 0.25},
+              "middle_distillate": {"N-decane": 0.5, "N-dodecane": 0.5}}
+
+
+def t_to_session(a):
+    """Create a hysys_bridge session (feed -> heater) from one refinery pool; build and solve it with dwsim_build/dwsim_solve."""
+    from .ir import Flowsheet, Stream, Unit
+    from . import mcp_server as M
+    pool = a["pool"]; surr = a.get("surrogate") or SURROGATES.get(pool)
+    if not surr: raise ValueError(f"no surrogate for pool {pool!r}; known: {sorted(SURROGATES)}, or pass surrogate={{compound: mass_fraction}}")
+    if abs(sum(surr.values()) - 1.0) > 1e-6: raise ValueError("surrogate mass fractions must sum to 1")
+    res = t_run(a); kg_h = res["pools_kg_h"].get(pool)
+    if not kg_h or kg_h <= 0: raise ValueError(f"pool {pool!r} is empty for this configuration; pools: {sorted(res['pools_kg_h'])}")
+    if a["name"] in M.SESSIONS and not a.get("overwrite"): raise ValueError(f"session {a['name']!r} exists; pass overwrite=true")
+    fs = Flowsheet(a["name"], a.get("package", "Peng-Robinson"), list(surr))
+    fs.streams = {"FEED": Stream("FEED", "feed", None, "H1", T_C=a.get("feed_T_C", 40.0), P_kPa=a.get("feed_P_kPa", 500.0), mass_flow_kg_h=kg_h,
+                                 composition=dict(surr), composition_basis="mass"),
+                  "OUT": Stream("OUT", "product", "H1", None, T_C=a["heat_to_C"], P_kPa=a.get("feed_P_kPa", 500.0) - a.get("dp_kPa", 50.0))}
+    fs.units = {"H1": Unit("H1", "heater")}; fs.relink(); M.SESSIONS[a["name"]] = fs
+    return {"session": a["name"], "pool": pool, "pool_kg_h": kg_h, "slate": res["slate"], "surrogate_mass_fractions": surr,
+            "surrogate_note": "illustrative compounds standing in for a lumped cut; override with `surrogate`", "next": "dwsim_build, then dwsim_solve"}
+
+
 def _s(props, req): return {"type": "object", "properties": props, "required": req, "additionalProperties": False}
 
 TOOLS = {
@@ -46,4 +72,9 @@ TOOLS = {
     "refinery_run": (t_run, "Whole-refinery mass balance (CDU/VDU + optional FCC + delayed coker) for a crude slate {crude_key: volume_fraction} at throughput_bpd. "
                             "Returns product pools, mass closure, FCC warnings, Nelson complexity. Screening only. Needs REFINERY_DESIGN_PATH.",
                      _s({"slate": {"type": "object"}, "throughput_bpd": {"type": "number"}, "fcc": {"type": "boolean"}, "coker": {"type": "boolean"}}, ["slate", "throughput_bpd"])),
+    "refinery_to_session": (t_to_session, "Run the refinery balance and create a hysys_bridge session (feed -> heater) from one product pool (lpg|gasoline_range|middle_distillate) using illustrative surrogate compounds. Then dwsim_build (confirm) and dwsim_solve. Needs REFINERY_DESIGN_PATH.",
+                            _s({"name": {"type": "string"}, "slate": {"type": "object"}, "throughput_bpd": {"type": "number"}, "pool": {"type": "string"},
+                                "heat_to_C": {"type": "number"}, "feed_T_C": {"type": "number"}, "feed_P_kPa": {"type": "number"}, "dp_kPa": {"type": "number"},
+                                "surrogate": {"type": "object"}, "package": {"type": "string"}, "fcc": {"type": "boolean"}, "coker": {"type": "boolean"}, "overwrite": {"type": "boolean"}},
+                               ["name", "slate", "throughput_bpd", "pool", "heat_to_C"])),
 }

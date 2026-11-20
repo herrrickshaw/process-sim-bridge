@@ -33,6 +33,20 @@ class Refinery(unittest.TestCase):
             self.assertGreater(r2["black_oil_yield_wt_pct"], r["black_oil_yield_wt_pct"])
         finally: os.environ.pop("REFINERY_DESIGN_PATH", None)
 
+    @unittest.skipUnless(HAVE, "needs numpy and the refinery-design-opensource clone")
+    def test_pool_becomes_a_buildable_session(self):
+        from hysys_bridge.dwsim import tools as DT
+        os.environ["REFINERY_DESIGN_PATH"] = LIB; M.SESSIONS.clear(); DT.CASES.clear()
+        try:
+            slate = {"azeri_btc": 1.0}
+            err, r = call("refinery_to_session", name="g", slate=slate, throughput_bpd=200000, pool="gasoline_range", heat_to_C=120)
+            self.assertFalse(err, r); self.assertAlmostEqual(M.SESSIONS["g"].streams["FEED"].mass_flow_kg_h, r["pool_kg_h"])
+            self.assertAlmostEqual(sum(r["surrogate_mass_fractions"].values()), 1.0)
+            err, b = call("dwsim_build", name="g", confirm=True); self.assertTrue(b["built"], b)
+            err, e = call("refinery_to_session", name="g", slate=slate, throughput_bpd=200000, pool="gasoline_range", heat_to_C=120); self.assertTrue(err); self.assertIn("overwrite", e)
+            err, e = call("refinery_to_session", name="h", slate=slate, throughput_bpd=200000, pool="petcoke", heat_to_C=120); self.assertTrue(err); self.assertIn("surrogate", e)
+        finally: os.environ.pop("REFINERY_DESIGN_PATH", None)
+
 
 if __name__ == "__main__":
     unittest.main()
