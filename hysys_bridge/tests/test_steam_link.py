@@ -63,6 +63,34 @@ class Steam(unittest.TestCase):
             self.assertTrue(call("steam_lost_power", duty_kW=1.0, extraction_P_kPa=1000.0, **bad)[0])
         self.assertTrue(call("steam_lost_power", extraction_P_kPa=3800.0, **base)[0])                 # inside the reheater pressure drop
 
+    @unittest.skipUnless(HAVE, "needs CoolProp")
+    def test_feedwater_credit_identities(self):
+        base = dict(duty_kW=10000.0, extraction_P_kPa=1000.0)
+        g = call("steam_lost_power", **base)[1]; self.assertIsNone(g["feedwater_credit"]); self.assertAlmostEqual(g["gross_lost_power_kW"], g["lost_power_kW"])
+        full = call("steam_lost_power", fwh_extraction_P_kPa=200.0, condensate_return_T_C=90.0, **base)[1]
+        half = call("steam_lost_power", fwh_extraction_P_kPa=200.0, condensate_return_T_C=90.0, condensate_return_fraction=0.5, **base)[1]
+        c = full["feedwater_credit"]
+        self.assertAlmostEqual(full["lost_power_kW"], full["gross_lost_power_kW"] - c["credit_kW"])
+        self.assertAlmostEqual(c["credit_kW"], c["heater_steam_displaced_kg_s"] * c["heater_steam_work_kJ_kg"])           # displaced steam keeps expanding
+        self.assertAlmostEqual(c["heater_steam_displaced_kg_s"] * c["heater_heat_per_kg_kJ_kg"], full["steam_kg_s"] * c["heat_returned_kJ_per_kg_extracted"])
+        self.assertAlmostEqual(half["feedwater_credit"]["credit_kW"], 0.5 * c["credit_kW"])                              # linear in the return fraction
+        self.assertGreater(c["credit_kW"], 0); self.assertLess(c["credit_kW"], full["gross_lost_power_kW"])
+        none = call("steam_lost_power", fwh_extraction_P_kPa=200.0, condensate_return_T_C=38.0, **base)[1]            # returns at hotwell temperature: nothing to credit
+        self.assertAlmostEqual(none["feedwater_credit"]["credit_kW"], 0.0, delta=5.0)
+        hotter = call("steam_lost_power", fwh_extraction_P_kPa=700.0, condensate_return_T_C=90.0, **base)[1]            # same heat, taken at a higher-pressure heater: more work saved
+        self.assertGreater(hotter["feedwater_credit"]["credit_kW"], c["credit_kW"])
+        self.assertTrue(any("within 5 K" in w for w in call("steam_lost_power", fwh_extraction_P_kPa=200.0, condensate_return_T_C=118.0, **base)[1]["warnings"]))
+        for bad in (dict(fwh_extraction_P_kPa=200.0), dict(condensate_return_T_C=90.0), dict(fwh_extraction_P_kPa=200.0, condensate_return_T_C=90.0, condensate_return_fraction=1.5),
+                    dict(fwh_extraction_P_kPa=1.0, condensate_return_T_C=90.0), dict(fwh_extraction_P_kPa=200.0, condensate_return_T_C=200.0)):
+            self.assertTrue(call("steam_lost_power", **base, **bad)[0])
+
+    @unittest.skipUnless(HAVE, "needs CoolProp")
+    def test_feedwater_credit_with_reheat(self):
+        rh = dict(duty_kW=10000.0, extraction_P_kPa=6000.0, reheat_P_kPa=4000.0, reheat_T_C=565.0)
+        a = call("steam_lost_power", **rh)[1]; b = call("steam_lost_power", fwh_extraction_P_kPa=700.0, condensate_return_T_C=120.0, **rh)[1]
+        self.assertAlmostEqual(a["gross_lost_power_kW"], b["gross_lost_power_kW"]); self.assertLess(b["lost_power_kW"], a["lost_power_kW"])
+        self.assertTrue(call("steam_lost_power", fwh_extraction_P_kPa=3800.0, condensate_return_T_C=120.0, **rh)[0])     # inside the reheater drop
+
 
 if __name__ == "__main__":
     unittest.main()
