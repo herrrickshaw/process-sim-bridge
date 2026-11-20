@@ -36,6 +36,9 @@ def t_run(a):
             "light_product_yield_wt_pct": r.light_product_yield_wt_pct, "middle_distillate_yield_wt_pct": r.middle_distillate_yield_wt_pct,
             "black_oil_yield_wt_pct": r.black_oil_yield_wt_pct, "nelson_complexity": r.complexity(),
             "fcc_regen_temperature_C": r.fcc.regen_temperature_C if r.fcc else None, "fcc_conversion_wt_pct": r.fcc.conversion_wt_pct if r.fcc else None,
+            "distillation_kg_h": {k: v.mass_kg_h for k, v in r.distillation.streams.items()},
+            "fcc_yields_wt_pct": {k: float(v) for k, v in r.fcc.yields_wt_pct.items()} if r.fcc else None,
+            "coker_kg_h": ({"coke": r.coker.coke_kg_h, "gas": r.coker.gas_kg_h, "naphtha": r.coker.naphtha_kg_h, "gas_oil": r.coker.gas_oil_kg_h} if r.coker else None),
             "warnings": r.warnings, "basis": "screening correlations, not a rigorous simulation"}
 
 

@@ -4,6 +4,8 @@ Scope: how the bridge represents plant utilities next to the process flowsheet, 
 Tools: `hysys_bridge/utilities_link.py` (air, nitrogen, cooling water, demin water, balance) and `hysys_bridge/steam_link.py` (steam demand, turbine lost power).
 No standard, vendor curve or plant datasheet was read for this section: every number is physics (CoolProp, mass and energy balances) or your input, and every defensible-looking default is listed in the result's `assumed_defaults`.
 
+Diagrams: `docs/diagrams/pfd_ufd.html` (process flow and utilities flow, both drawn from live tool results by `examples/build_flow_diagrams.py`; `pfd.svg` and `ufd.svg` separately).
+
 ## 1. Principle
 Utilities are modelled as **consumers of the process**, not as simulated plants: the process simulators (DWSIM, HYSYS, Aspen) produce duties, flows and stream states; the utility tools turn those into utility loads and make-up flows. Three rules keep them honest:
 1. A load is derived from a solved result or a stated input (a duty, a Nm3/h demand, a header pressure). Nothing is guessed silently.

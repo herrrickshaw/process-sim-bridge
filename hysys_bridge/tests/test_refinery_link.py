@@ -55,3 +55,18 @@ class Refinery(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(HAVE, "needs numpy and the refinery-design-opensource clone")
+class Diagrams(unittest.TestCase):
+    def test_diagrams_build_without_dwsim_and_say_so(self):
+        os.environ["REFINERY_DESIGN_PATH"] = LIB; os.environ.pop("DWSIM_MCP_CMD", None)
+        try:
+            from examples import build_flow_diagrams as B
+            d = B.gather(); self.assertIsNone(d["duty_kW"])
+            pfd, ufd = B.pfd(d), B.ufd(d)
+            self.assertTrue(pfd.startswith("<svg") and "Crude slate" in pfd and "Pool heater" not in pfd)
+            self.assertIn("solved DWSIM case", ufd)
+            self.assertAlmostEqual(sum(d["ref"]["pools_kg_h"].values()), d["ref"]["feed_kg_h"], delta=0.03 * d["ref"]["feed_kg_h"])      # the pool boxes the PFD prints close the balance
+            self.assertAlmostEqual(sum(d["ref"]["distillation_kg_h"].values()), d["ref"]["feed_kg_h"], delta=0.03 * d["ref"]["feed_kg_h"])
+        finally: os.environ.pop("REFINERY_DESIGN_PATH", None)
