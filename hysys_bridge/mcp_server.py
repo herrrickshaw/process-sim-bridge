@@ -256,6 +256,8 @@ from .refinery_link import TOOLS as _REFINERY_TOOLS   # refinery_* tools: whole-
 TOOLS.update(_REFINERY_TOOLS)
 from .steam_link import TOOLS as _STEAM_TOOLS         # steam_* tools: heat duty -> steam demand vs the NETL B11A cycle
 TOOLS.update(_STEAM_TOOLS)
+from .utilities_link import TOOLS as _UTIL_TOOLS      # utility_* tools: air, nitrogen, cooling water, demin water, plant balance
+TOOLS.update(_UTIL_TOOLS)
 
 
 # ---- JSON-RPC / MCP stdio loop ----------------------------------------------------------------------------
