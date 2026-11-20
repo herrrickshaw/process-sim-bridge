@@ -12,7 +12,7 @@ BACKEND = ("our backend wrote the specification the wrong way (calculation mode,
            ["EFFICIENCY_OUT_OF_RANGE", "UNIT_HAD_NO_EFFECT"])
 PLAUSIBILITY = ("the solve finished but the result is not physical: record it as a warning in the ledger and compare with the source. If the source flowsheet shows the same thing it is a property of the case; if not, look for a basis or sign error first.",
                 ["HEATER_COOLED", "COOLER_HEATED", "PRESSURE_WRONG_DIRECTION", "HX_TEMPERATURE_CROSS", "HX_HEAT_FLOW_REVERSED", "TEMPERATURE_BELOW_FREEZING",
-                 "COLUMN_REFLUX_BELOW_MINIMUM", "MIXER_PRESSURE_MISMATCH"])
+                 "COLUMN_REFLUX_BELOW_MINIMUM", "MIXER_PRESSURE_MISMATCH", "NEGATIVE_FLOW"])
 CONVERGENCE = ("a recycle loop needs a better starting point. Allowed levers, in this order, each logged: give the tear stream an estimate, solve the open loop first and use its stream, "
                "ramp the recycle fraction, then acceleration. Not allowed: loosening the tolerance until it passes.", ["RECYCLE_NO_ESTIMATE"])
 CATEGORY = {c: (name, text) for name, (text, codes) in (("case_error", CASE_ERROR), ("backend_mapping", BACKEND), ("plausibility", PLAUSIBILITY), ("convergence", CONVERGENCE)) for c in codes}

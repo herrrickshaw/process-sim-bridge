@@ -5,14 +5,14 @@ tests/test_dwsim_live.py runs the same backend against the real server."""
 from __future__ import annotations
 from .backend import TOOLS
 
-KNOWN = {"Nitrogen", "Hydrogen", "Ammonia", "Water", "Ethanol", "Methanol", "Benzene", "Toluene", "Methane", "Propylene", "Propane", "N-butane", "N-pentane", "N-hexane", "N-heptane", "N-octane", "N-decane", "N-dodecane"}  # hydrocarbons verified live 2026-11-20 (Propylene via the cumene heater case)
+KNOWN = {"Nitrogen", "Hydrogen", "Ammonia", "Water", "Carbon monoxide", "Carbon dioxide", "Ethanol", "Methanol", "Benzene", "Toluene", "Methane", "Propylene", "Propane", "N-butane", "N-pentane", "N-hexane", "N-heptane", "N-octane", "N-decane", "N-dodecane"}  # hydrocarbons verified live 2026-11-20 (Propylene via the cumene heater case)
 PACKAGES = {"Raoult's Law", "Peng-Robinson (PR)", "Soave-Redlich-Kwong (SRK)", "NRTL", "Steam Tables (IAPWS-IF97)"}
 REQ = {"create": set(), "add_compounds": {"flowsheet_id", "names"}, "set_package": {"flowsheet_id", "name"},
        "add_stream": {"flowsheet_id", "name"}, "add_unitop": {"flowsheet_id", "type", "name"}, "unitop_set": {"flowsheet_id", "name", "properties"},
        "connect": {"flowsheet_id", "unitop"}, "dof": {"flowsheet_id"}, "check": {"flowsheet_id"}, "solve": {"flowsheet_id"},
-       "stream_results": {"flowsheet_id", "name"}, "add_conversion": {"flowsheet_id", "name", "stoichiometry", "base_compound"}, "explain": {"flowsheet_id", "object_name"}}
+       "stream_results": {"flowsheet_id", "name"}, "add_conversion": {"flowsheet_id", "name", "stoichiometry", "base_compound"}, "explain": {"flowsheet_id", "object_name"}, "add_equilibrium": {"flowsheet_id", "name", "stoichiometry", "base_compound"}}
 OPT = {"create": {"name"}, "add_stream": {"temperature_K", "pressure_Pa", "mass_flow_kg_s", "molar_flow_mol_s", "vapor_fraction", "composition"},
-       "connect": {"feed_stream", "feed_port", "product_stream", "product_port"}, "add_conversion": {"conversion", "phase"}}
+       "connect": {"feed_stream", "feed_port", "product_stream", "product_port"}, "add_conversion": {"conversion", "phase"}, "add_equilibrium": {"phase", "basis", "units", "lnkeq_expression"}}
 
 
 class FakeDwsim:
@@ -43,6 +43,9 @@ class FakeDwsim:
         if n == "set_package":
             if args["name"] not in PACKAGES: raise RuntimeError(f"The given key '{args['name']}' was not present in the dictionary.")
             self.package = args["name"]; return {"property_package": self.package}
+        if n == "add_equilibrium":
+            if args["name"] in self.reactions: raise RuntimeError("Reaction name must be unique in the flowsheet")
+            self.reactions[args["name"]] = dict(args, conversion="0"); return {"name": args["name"], "type": "Equilibrium", "reaction_set": "DefaultSet"}
         if n == "add_conversion":
             if args["name"] in self.reactions: raise RuntimeError("Reaction name must be unique in the flowsheet")
             if args["base_compound"] not in args["stoichiometry"]: raise RuntimeError("base compound is not in the stoichiometry")

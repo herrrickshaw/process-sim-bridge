@@ -206,7 +206,7 @@ class Diagnose(unittest.TestCase):
         allc = [c for _, codes in (diagnose.CASE_ERROR, diagnose.BACKEND, diagnose.PLAUSIBILITY, diagnose.CONVERGENCE) for c in codes]
         self.assertEqual(len(allc), len(set(allc)))
         self.assertEqual(diagnose.CATEGORY["FEED_NO_FLOW"][0], "case_error"); self.assertEqual(diagnose.CATEGORY["EFFICIENCY_OUT_OF_RANGE"][0], "backend_mapping")
-        self.assertEqual(diagnose.CATEGORY["HX_TEMPERATURE_CROSS"][0], "plausibility"); self.assertEqual(diagnose.CATEGORY["RECYCLE_NO_ESTIMATE"][0], "convergence")
+        self.assertEqual(diagnose.CATEGORY["HX_TEMPERATURE_CROSS"][0], "plausibility"); self.assertEqual(diagnose.CATEGORY["RECYCLE_NO_ESTIMATE"][0], "convergence"); self.assertEqual(diagnose.CATEGORY["NEGATIVE_FLOW"][0], "plausibility")
 
     def test_unknown_code_is_flagged_not_guessed(self):
         c = diagnose.classify([{"code": "NEW_CODE_2027", "severity": "warning", "object": "A"}])[0]
@@ -501,7 +501,7 @@ class Reactor(unittest.TestCase):
                 ("needs reactants", lambda c: rx(c).update(stoichiometry={"Nitrogen": 1, "Ammonia": 2})),
                 ("needs an anchor", lambda c: rx(c).pop("anchor")),
                 ("molar_mass_g_mol", lambda c: c["basis"].update(molar_mass_g_mol={})),
-                ("at most one conversion_reactor", lambda c: c["units"].append({"id": "R2", "type": "conversion_reactor", "params": c["units"][0]["params"]})),
+                ("at most one reactor", lambda c: c["units"].append({"id": "R2", "type": "conversion_reactor", "params": c["units"][0]["params"]})),
                 ("belongs on a conversion_reactor", lambda c: c["units"].append({"id": "H", "type": "heater", "params": {"reaction": {}}}))]
         for needle, m in muts: self.assertTrue(any(needle in x for x in self.problems(m)), needle)
 
@@ -528,6 +528,44 @@ class Reactor(unittest.TestCase):
     def test_unreadable_duty_is_an_error_not_a_default(self):
         be = DwsimBackend(ReactorTransport()); be.fid = "fs-1"; be.t.fake.duty_kW = "unknown"
         with self.assertRaises(RuntimeError): be.reactor_duty_kJ_h("R")
+
+
+EQUIL = os.path.join(os.path.dirname(CASE), "water-gas-shift-equilibrium-reactor-fossee-exp4.json")
+
+
+class Equilibrium(unittest.TestCase):
+    def ec(self): return schema.load(EQUIL)
+    def problems(self, mutate):
+        c = self.ec(); mutate(c); return schema.validate(c)
+    def test_validates_and_scenarios_apply(self):
+        c = self.ec(); self.assertEqual(schema.validate(c), [])
+        for sid in ("pressure-2-bar", "1000K-2-bar"): self.assertEqual(schema.validate(schema.apply_scenario(c, sid)), [], sid)
+
+    def test_equilibrium_rules_fire(self):
+        rx = lambda c: c["units"][0]["params"]["reaction"]
+        muts = [("does not belong on an equilibrium", lambda c: rx(c).update(conversion_pct=50)),
+                ("basis must be one of", lambda c: rx(c).update(basis="bananas")),
+                ("must be 'Pa'", lambda c: rx(c).update(units="kPa")),
+                ("lnkeq_expression", lambda c: rx(c).update(lnkeq_expression="")),
+                ("conserve mass", lambda c: rx(c)["stoichiometry"].update(Hydrogen=2))]
+        for needle, m in muts: self.assertTrue(any(needle in x for x in self.problems(m)), needle)
+
+    def test_reference_is_the_stated_equilibrium(self):
+        """The reference mass fractions must satisfy the equilibrium relation with the K the case cites: K = x_CO2 x_H2 / (x_CO x_H2O) in moles."""
+        c = self.ec(); mm = c["basis"]["molar_mass_g_mol"]; r = {x["name"]: x["value"] for x in c["reported"]}
+        n = {k: r["vapor_" + k.split()[-1].lower() + "_mass_fraction"] / mm[k] for k in mm}
+        K = n["Carbon dioxide"] * n["Hydrogen"] / (n["Carbon monoxide"] * n["Water"]); self.assertAlmostEqual(K, 4.2267, delta=0.005)
+        self.assertAlmostEqual(n["Carbon monoxide"], n["Water"], delta=1e-6); self.assertAlmostEqual(n["Carbon dioxide"], n["Hydrogen"], delta=1e-6)
+
+    def test_backend_sends_equilibrium_reaction_before_reactor(self):
+        from hysys_bridge import hysys_writer
+        fake = FakeDwsim(); tr = type("T", (), {"call": lambda s, tool, a: fake.call(tool, a), "close": lambda s: None})()
+        be = DwsimBackend(tr); hysys_writer.write(schema.to_flowsheet(self.ec(), "Raoult's Law"), be); be.solve()
+        names = [tool for tool, _ in fake.calls]; self.assertLess(names.index("dwsim_reaction_add_equilibrium"), names.index("dwsim_unitop_add"))
+        add = next(a for tool, a in fake.calls if tool == "dwsim_reaction_add_equilibrium")
+        self.assertEqual((add["basis"], add["units"], add["phase"], add["base_compound"]), ("partial pressure", "Pa", "Vapor", "Carbon monoxide")); self.assertNotIn("lnkeq_expression", add)
+        self.assertNotIn("dwsim_reaction_add_conversion", names)
+        self.assertEqual(fake.params["R"]["ReactorOperationMode"], "Isothermic")
 
 
 class Ledger(unittest.TestCase):

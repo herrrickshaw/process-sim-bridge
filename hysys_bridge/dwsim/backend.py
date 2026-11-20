@@ -20,11 +20,11 @@ TOOLS = {
     "set_package": "dwsim_thermo_set_property_package", "add_stream": "dwsim_stream_add_material",
     "add_unitop": "dwsim_unitop_add", "unitop_set": "dwsim_unitop_set", "connect": "dwsim_unitop_connect",
     "dof": "dwsim_flowsheet_degrees_of_freedom", "check": "dwsim_flowsheet_check", "solve": "dwsim_solve_run",
-    "stream_results": "dwsim_stream_get_results", "add_conversion": "dwsim_reaction_add_conversion", "explain": "dwsim_explain_result",
+    "stream_results": "dwsim_stream_get_results", "add_conversion": "dwsim_reaction_add_conversion", "add_equilibrium": "dwsim_reaction_add_equilibrium", "explain": "dwsim_explain_result",
 }
 DWSIM_TYPE = {"mixer": "Mixer", "splitter": "Splitter", "pump": "Pump", "heater": "Heater", "cooler": "Cooler",
-              "valve": "Valve", "compressor": "Compressor", "separator": "Vessel", "recycle": "Recycle", "conversion_reactor": "ConversionReactor"}      # names are in dwsim_unitop_add's list
-UNIT_PARAMS_VERIFIED = {"pump", "heater", "cooler", "valve", "compressor", "mixer", "separator", "splitter", "recycle", "conversion_reactor"}   # conversion_reactor: verified live 2026-11-21 (FOSSEE Exp 5); splitter: first outlet mass flow -> StreamMassFlowSpec, verified 2026-11-20 (1000 -> 300 + 700 kg/h)
+              "valve": "Valve", "compressor": "Compressor", "separator": "Vessel", "recycle": "Recycle", "conversion_reactor": "ConversionReactor", "equilibrium_reactor": "EquilibriumReactor"}      # names are in dwsim_unitop_add's list
+UNIT_PARAMS_VERIFIED = {"pump", "heater", "cooler", "valve", "compressor", "mixer", "separator", "splitter", "recycle", "conversion_reactor", "equilibrium_reactor"}   # conversion_reactor: verified live 2026-11-21 (FOSSEE Exp 5); splitter: first outlet mass flow -> StreamMassFlowSpec, verified 2026-11-20 (1000 -> 300 + 700 kg/h)
 PACKAGE = {"Peng-Robinson": "Peng-Robinson (PR)", "SRK": "Soave-Redlich-Kwong (SRK)", "Steam Tables": "Steam Tables (IAPWS-IF97)"}
 KEYMAP = {"T": ("temperature_K", lambda v: v + 273.15, lambda v: v - 273.15),
           "P": ("pressure_Pa", lambda v: v * 1e3, lambda v: v / 1e3),
@@ -122,7 +122,7 @@ class DwsimBackend:
         t, ins, outs = u["type"], u["inlets"], u["outlets"]
         if t == "splitter" and "split_ratio" in u.get("params", {}):                 # SplitRatios mode; SR1 is the first outlet's share, the rest is the balance (verified 2026-11-20, recycle loop)
             return {"OperationMode": "SplitRatios", "SR1": float(u["params"]["split_ratio"])}
-        if t == "conversion_reactor":                                                 # reaction goes in via add_conversion; here the thermal mode and the pressure drop
+        if t in ("conversion_reactor", "equilibrium_reactor"):                       # reaction goes in via add_conversion; here the thermal mode and the pressure drop
             p = {"ReactorOperationMode": {"isothermal": "Isothermic", "adiabatic": "Adiabatic"}[u["params"]["thermal_mode"]]}
             i, o = self.streams[ins[0]], self.streams[outs[0]]
             if "pressure_Pa" in o and "pressure_Pa" in i: p["DeltaP"] = i["pressure_Pa"] - o["pressure_Pa"]
@@ -148,9 +148,10 @@ class DwsimBackend:
         for sid, spec in self.streams.items():
             self._c("add_stream", name=sid, **({} if sid in made else spec))
         for uid, u in self.units.items():
-            if u["type"] == "conversion_reactor":                                         # the reaction must exist before the reactor reads its set
-                r = u["params"]["reaction"]
-                self._c("add_conversion", name=r.get("name", uid + "_reaction"), stoichiometry=r["stoichiometry"], base_compound=r["base_compound"], conversion=str(r["conversion_pct"]), phase=r["phase"])
+            if u["type"] in ("conversion_reactor", "equilibrium_reactor"):                 # the reaction must exist before the reactor reads its set
+                r = u["params"]["reaction"]; nm = r.get("name", uid + "_reaction")
+                if u["type"] == "conversion_reactor": self._c("add_conversion", name=nm, stoichiometry=r["stoichiometry"], base_compound=r["base_compound"], conversion=str(r["conversion_pct"]), phase=r["phase"])
+                else: self._c("add_equilibrium", name=nm, stoichiometry=r["stoichiometry"], base_compound=r["base_compound"], phase=r["phase"], basis=r["basis"], units=r.get("units", ""), **({"lnkeq_expression": r["lnkeq_expression"]} if "lnkeq_expression" in r else {}))
             self._c("add_unitop", type=DWSIM_TYPE[u["type"]], name=uid)
             for k, s in enumerate(u["inlets"]): self._c("connect", unitop=uid, feed_stream=s, feed_port=k)
             for k, s in enumerate(u["outlets"]): self._c("connect", unitop=uid, product_stream=s, product_port=k)
