@@ -1,0 +1,374 @@
+{
+ "id": "water-heater-cooler-tutorial",
+ "source": {
+  "title": "DWSIM Tutorials: Heater and Cooler (water 25 C to 80 C and back)",
+  "doi": null,
+  "url": "https://dwsim.org/tutorials/en/beginner/03-heater-cooler.html",
+  "licence": "DWSIM project documentation (licence not checked; facts only)",
+  "use": "facts-only (specification and expected values); no text copied",
+  "read": "full-text",
+  "fetch_route": "direct GET via fetch_source.py",
+  "note": "the tutorial's expected duty is the rounded '~230 kW' (hand calculation 229.9 kW with Cp 4.18); the point values here are an independent calculation: CoolProp IAPWS-95 enthalpy difference at the stated pressures, computed 2026-11-20"
+ },
+ "basis": {
+  "compounds": [
+   "Water"
+  ],
+  "package_in_paper": "Steam Tables",
+  "packages": [
+   "Steam Tables",
+   "Peng-Robinson",
+   "SRK"
+  ],
+  "composition_basis": "mole",
+  "molar_mass_g_mol": {
+   "Water": 18.01528
+  },
+  "molar_mass_source": "standard atomic weights",
+  "enthalpy_reference": "each simulator's own; the duty is the stream enthalpy difference times the mass flow, so the reference does not depend on it"
+ },
+ "streams": [
+  {
+   "id": "COLD",
+   "role": "feed",
+   "src": null,
+   "dst": "H",
+   "T": {
+    "value": 25.0,
+    "unit": "C",
+    "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler): 298.15 K"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler): 1 atm"
+   },
+   "mass_flow": {
+    "value": 3600.0,
+    "unit": "kg/h",
+    "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler): 1.0 kg/s"
+   },
+   "composition": {
+    "values": {
+     "Water": 1.0
+    },
+    "provenance": {
+     "Water": "reported"
+    }
+   }
+  },
+  {
+   "id": "HOT",
+   "role": "intermediate",
+   "src": "H",
+   "dst": "C",
+   "T": {
+    "value": 80.0,
+    "unit": "C",
+    "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler): heater outlet 353.15 K"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler): pressure drop 0"
+   }
+  },
+  {
+   "id": "COOLED",
+   "role": "product",
+   "src": "C",
+   "dst": null,
+   "T": {
+    "value": 25.0,
+    "unit": "C",
+    "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler): cooler outlet 298.15 K"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler): pressure drop 0"
+   }
+  }
+ ],
+ "units": [
+  {
+   "id": "H",
+   "type": "heater"
+  },
+  {
+   "id": "C",
+   "type": "cooler"
+  }
+ ],
+ "reported": [
+  {
+   "name": "heater_duty",
+   "kind": "unit_duty",
+   "target": "H",
+   "value": 828486.518,
+   "unit": "kJ/h",
+   "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler) results table: ~230 kW; independent: CoolProp IAPWS-95 enthalpy difference at the stated pressures, computed 2026-11-20 (230.135 kW)",
+   "precision": "independent calculation"
+  },
+  {
+   "name": "cooler_duty",
+   "kind": "unit_duty",
+   "target": "C",
+   "value": -828486.518,
+   "unit": "kJ/h",
+   "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler) results table: heat removed ~230 kW, opposite sign; independent value as above",
+   "precision": "independent calculation"
+  },
+  {
+   "name": "net_duty",
+   "kind": "units_duty_sum_kJ_h",
+   "targets": [
+    "H",
+    "C"
+   ],
+   "range": [
+    -50.0,
+    50.0
+   ],
+   "unit": "kJ/h",
+   "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler): 'if you heat and then cool the same stream back to its original state, the net energy exchange should be zero' (50 kJ/h = 0.014 kW)"
+  },
+  {
+   "name": "hot_T",
+   "kind": "stream_T_C",
+   "target": "HOT",
+   "value": 80.0,
+   "unit": "C",
+   "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler) results table: 353.15 K",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "cooled_T",
+   "kind": "stream_T_C",
+   "target": "COOLED",
+   "value": 25.0,
+   "unit": "C",
+   "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler) results table: 298.15 K",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "hot_P",
+   "kind": "stream_P_kPa",
+   "target": "HOT",
+   "value": 101.325,
+   "unit": "kPa",
+   "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler): pressure drop 0",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "cooled_P",
+   "kind": "stream_P_kPa",
+   "target": "COOLED",
+   "value": 101.325,
+   "unit": "kPa",
+   "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler): pressure drop 0",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "hot_vapor_fraction",
+   "kind": "stream_vapor_fraction",
+   "target": "HOT",
+   "range": [
+    0.0,
+    0.001
+   ],
+   "unit": "-",
+   "anchor": "liquid water at 80 C and 1 atm (saturation 99.97 C)"
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.005,
+  "note": "IAPWS-IF97 (the simulator's Steam Tables) and IAPWS-95 (the reference) agree to about 0.01%; the other packages are reported against the same reference"
+ },
+ "scenarios": [
+  {
+   "id": "heat-to-95C",
+   "why": "a larger temperature rise, still liquid: independent duty 293.182 kW",
+   "overrides": [
+    {
+     "stream": "HOT",
+     "path": [
+      "T",
+      "value"
+     ],
+     "set": 95.0
+    },
+    {
+     "reported": "hot_T",
+     "path": [
+      "value"
+     ],
+     "set": 95.0
+    },
+    {
+     "reported": "heater_duty",
+     "path": [
+      "value"
+     ],
+     "set": 1055453.732
+    },
+    {
+     "reported": "cooler_duty",
+     "path": [
+      "value"
+     ],
+     "set": -1055453.732
+    }
+   ]
+  },
+  {
+   "id": "flow-2-kg-s",
+   "why": "double the flow: both duties double (460.270 kW), which tests that the mass flow reaches the duty",
+   "overrides": [
+    {
+     "stream": "COLD",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 7200.0
+    },
+    {
+     "reported": "heater_duty",
+     "path": [
+      "value"
+     ],
+     "set": 1656973.035
+    },
+    {
+     "reported": "cooler_duty",
+     "path": [
+      "value"
+     ],
+     "set": -1656973.035
+    }
+   ]
+  },
+  {
+   "id": "through-boiling-to-110C",
+   "why": "heat through the boiling point to superheated steam at 1 atm: the duty includes the latent heat (2591.265 kW), and the cooler returns it to liquid; packages differ most here",
+   "overrides": [
+    {
+     "stream": "HOT",
+     "path": [
+      "T",
+      "value"
+     ],
+     "set": 110.0
+    },
+    {
+     "reported": "hot_T",
+     "path": [
+      "value"
+     ],
+     "set": 110.0
+    },
+    {
+     "reported": "heater_duty",
+     "path": [
+      "value"
+     ],
+     "set": 9328552.221
+    },
+    {
+     "reported": "cooler_duty",
+     "path": [
+      "value"
+     ],
+     "set": -9328552.221
+    },
+    {
+     "reported": "hot_vapor_fraction",
+     "path": [
+      "range"
+     ],
+     "set": [
+      0.999,
+      1.0
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pressure-drop-100kPa",
+   "why": "feed at 301.325 kPa abs and a 100 kPa drop across the heater (outlet 201.325 kPa), which tests the sign of the pressure-drop parameter; duties from the independent calculation at those pressures (230.030 and 230.122 kW); the heater and the cooler no longer follow the same path (301 to 201 kPa while heating, 201 kPa while cooling), so the net duty is the difference of the two independent values, -333.3 kJ/h, not zero; the band is 2% around it",
+   "overrides": [
+    {
+     "stream": "COLD",
+     "path": [
+      "P",
+      "value"
+     ],
+     "set": 301.325
+    },
+    {
+     "stream": "HOT",
+     "path": [
+      "P",
+      "value"
+     ],
+     "set": 201.325
+    },
+    {
+     "stream": "COOLED",
+     "path": [
+      "P",
+      "value"
+     ],
+     "set": 201.325
+    },
+    {
+     "reported": "hot_P",
+     "path": [
+      "value"
+     ],
+     "set": 201.325
+    },
+    {
+     "reported": "cooled_P",
+     "path": [
+      "value"
+     ],
+     "set": 201.325
+    },
+    {
+     "reported": "heater_duty",
+     "path": [
+      "value"
+     ],
+     "set": 828106.38
+    },
+    {
+     "reported": "cooler_duty",
+     "path": [
+      "value"
+     ],
+     "set": -828439.708
+    },
+    {
+     "reported": "net_duty",
+     "path": [
+      "range"
+     ],
+     "set": [
+      -340.0,
+      -327.0
+     ]
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "duties recomputed independently with CoolProp (IAPWS-95); temperatures and pressures are the specified values read back; net duty must vanish",
+  "human": false
+ },
+ "status": "built"
+}

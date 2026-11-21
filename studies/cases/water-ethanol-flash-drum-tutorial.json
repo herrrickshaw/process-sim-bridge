@@ -1,0 +1,331 @@
+{
+ "id": "water-ethanol-flash-drum-tutorial",
+ "source": {
+  "title": "DWSIM Tutorials: Simple Flash Drum (water/ethanol heated and flashed, NRTL)",
+  "doi": null,
+  "url": "https://dwsim.org/tutorials/en/beginner/04-simple-flash-drum.html",
+  "licence": "DWSIM project documentation (licence not checked; facts only)",
+  "use": "facts-only (specification and expected values); no text copied",
+  "read": "full-text",
+  "fetch_route": "direct GET via fetch_source.py",
+  "note": "the tutorial gives ranges and rounded '~' values, not exact numbers; no independent oracle exists for NRTL water/ethanol in this repo, so the case checks ranges, the exact mass balance and the approximate values"
+ },
+ "basis": {
+  "compounds": [
+   "Water",
+   "Ethanol"
+  ],
+  "package_in_paper": "NRTL",
+  "packages": [
+   "NRTL",
+   "Peng-Robinson",
+   "SRK"
+  ],
+  "composition_basis": "mass",
+  "enthalpy_reference": "not used"
+ },
+ "streams": [
+  {
+   "id": "FEED",
+   "role": "feed",
+   "src": null,
+   "dst": "H",
+   "T": {
+    "value": 26.85,
+    "unit": "C",
+    "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum): 300 K"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum): 1 atm"
+   },
+   "mass_flow": {
+    "value": 3600.0,
+    "unit": "kg/h",
+    "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum): 1.0 kg/s"
+   },
+   "composition": {
+    "values": {
+     "Water": 0.5,
+     "Ethanol": 0.5
+    },
+    "provenance": {
+     "Water": "reported",
+     "Ethanol": "reported"
+    }
+   }
+  },
+  {
+   "id": "TWO_PHASE",
+   "role": "intermediate",
+   "src": "H",
+   "dst": "SEP",
+   "T": {
+    "value": 86.85,
+    "unit": "C",
+    "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum): heater outlet 360 K"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum): heater pressure drop 0, so 1 atm"
+   }
+  },
+  {
+   "id": "VAPOR",
+   "role": "product",
+   "src": "SEP",
+   "dst": null,
+   "phase": "vapor"
+  },
+  {
+   "id": "LIQUID",
+   "role": "product",
+   "src": "SEP",
+   "dst": null,
+   "phase": "liquid"
+  }
+ ],
+ "units": [
+  {
+   "id": "H",
+   "type": "heater"
+  },
+  {
+   "id": "SEP",
+   "type": "separator"
+  }
+ ],
+ "reported": [
+  {
+   "name": "two_phase_vapor_fraction",
+   "kind": "stream_vapor_fraction",
+   "target": "TWO_PHASE",
+   "range": [
+    0.4,
+    0.8
+   ],
+   "unit": "-",
+   "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum) results table: 0.4 - 0.8"
+  },
+  {
+   "name": "vapor_mass_flow",
+   "kind": "stream_mass_kg_h",
+   "target": "VAPOR",
+   "range": [
+    1440.0,
+    2880.0
+   ],
+   "unit": "kg/h",
+   "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum) results table: 0.4 - 0.8 kg/s"
+  },
+  {
+   "name": "liquid_mass_flow",
+   "kind": "stream_mass_kg_h",
+   "target": "LIQUID",
+   "range": [
+    720.0,
+    2160.0
+   ],
+   "unit": "kg/h",
+   "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum) results table: 0.2 - 0.6 kg/s"
+  },
+  {
+   "name": "vapor_ethanol_fraction_enriched",
+   "kind": "stream_mass_fraction",
+   "target": "VAPOR",
+   "compound": "Ethanol",
+   "range": [
+    0.5,
+    1.0
+   ],
+   "unit": "-",
+   "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum) results table: > 0.50 (enriched)"
+  },
+  {
+   "name": "liquid_ethanol_fraction_depleted",
+   "kind": "stream_mass_fraction",
+   "target": "LIQUID",
+   "compound": "Ethanol",
+   "range": [
+    0.0,
+    0.5
+   ],
+   "unit": "-",
+   "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum) results table: < 0.50 (depleted)"
+  },
+  {
+   "name": "mass_balance",
+   "kind": "streams_mass_sum_kg_h",
+   "targets": [
+    "VAPOR",
+    "LIQUID"
+   ],
+   "value": 3600.0,
+   "unit": "kg/h",
+   "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum) results table: 1.0 = vapor + liquid kg/s",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "vapor_mass_flow_approx",
+   "kind": "stream_mass_kg_h",
+   "target": "VAPOR",
+   "value": 2304.0,
+   "unit": "kg/h",
+   "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum) step 7: ~0.64 kg/s (depends on NRTL)",
+   "precision": "two digits, model-dependent",
+   "pass_rel": 0.05
+  },
+  {
+   "name": "liquid_mass_flow_approx",
+   "kind": "stream_mass_kg_h",
+   "target": "LIQUID",
+   "value": 1296.0,
+   "unit": "kg/h",
+   "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum) step 7: ~0.36 kg/s",
+   "precision": "two digits, model-dependent",
+   "pass_rel": 0.05
+  },
+  {
+   "name": "vapor_ethanol_fraction_approx",
+   "kind": "stream_mass_fraction",
+   "target": "VAPOR",
+   "compound": "Ethanol",
+   "value": 0.66,
+   "unit": "-",
+   "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum) step 7: ~0.66",
+   "precision": "two digits, model-dependent",
+   "pass_rel": 0.05
+  },
+  {
+   "name": "liquid_ethanol_fraction_approx",
+   "kind": "stream_mass_fraction",
+   "target": "LIQUID",
+   "compound": "Ethanol",
+   "value": 0.22,
+   "unit": "-",
+   "anchor": "DWSIM tutorial 'Simple Flash Drum' (beginner/04-simple-flash-drum) step 7: ~0.22",
+   "precision": "two digits, model-dependent",
+   "pass_rel": 0.05
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.05,
+  "note": "default for point values; ranges are inclusive; the approximate values carry two digits and the tutorial says they depend on the NRTL parameters"
+ },
+ "scenarios": [
+  {
+   "id": "below-bubble-point",
+   "why": "350 K, 5 K below the tutorial's stated bubble point of about 355 K: everything should stay liquid, so the vapour stream is empty (the tutorial says nothing about this case; the expectation follows from its bubble and dew statements)",
+   "drop_reported": [
+    "vapor_ethanol_fraction_enriched",
+    "liquid_ethanol_fraction_depleted",
+    "vapor_mass_flow_approx",
+    "liquid_mass_flow_approx",
+    "vapor_ethanol_fraction_approx",
+    "liquid_ethanol_fraction_approx"
+   ],
+   "overrides": [
+    {
+     "stream": "TWO_PHASE",
+     "path": [
+      "T",
+      "value"
+     ],
+     "set": 76.85
+    },
+    {
+     "reported": "two_phase_vapor_fraction",
+     "path": [
+      "range"
+     ],
+     "set": [
+      0.0,
+      0.001
+     ]
+    },
+    {
+     "reported": "vapor_mass_flow",
+     "path": [
+      "range"
+     ],
+     "set": [
+      0.0,
+      1.0
+     ]
+    },
+    {
+     "reported": "liquid_mass_flow",
+     "path": [
+      "range"
+     ],
+     "set": [
+      3599.0,
+      3601.0
+     ]
+    }
+   ]
+  },
+  {
+   "id": "above-dew-point",
+   "why": "370 K, 5 K above the tutorial's stated dew point of about 365 K: everything should be vapour, so the liquid stream is empty",
+   "drop_reported": [
+    "vapor_ethanol_fraction_enriched",
+    "liquid_ethanol_fraction_depleted",
+    "vapor_mass_flow_approx",
+    "liquid_mass_flow_approx",
+    "vapor_ethanol_fraction_approx",
+    "liquid_ethanol_fraction_approx"
+   ],
+   "overrides": [
+    {
+     "stream": "TWO_PHASE",
+     "path": [
+      "T",
+      "value"
+     ],
+     "set": 96.85
+    },
+    {
+     "reported": "two_phase_vapor_fraction",
+     "path": [
+      "range"
+     ],
+     "set": [
+      0.999,
+      1.0
+     ]
+    },
+    {
+     "reported": "vapor_mass_flow",
+     "path": [
+      "range"
+     ],
+     "set": [
+      3599.0,
+      3601.0
+     ]
+    },
+    {
+     "reported": "liquid_mass_flow",
+     "path": [
+      "range"
+     ],
+     "set": [
+      0.0,
+      1.0
+     ]
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "ranges and approximate values transcribed from the tutorial; mass balance exact; the below-bubble and above-dew scenarios follow from the tutorial's bubble (~355 K) and dew (~365 K) statements",
+  "human": false
+ },
+ "status": "built"
+}

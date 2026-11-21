@@ -1,0 +1,276 @@
+{
+ "id": "water-gas-shift-equilibrium-reactor-fossee-exp4",
+ "source": {
+  "title": "SASTRA FOSSEE 'Process Simulation Using DWSIM' (Naren, v02, Dec 2017), Experiment 4",
+  "doi": null,
+  "url": "https://primary.fossee.in/dwsim/manuals/SASTRA-FOSSEE-DWSIM-v02-30Dec17.pdf",
+  "licence": "none seen on the document (index row licence_hint none-seen); facts only",
+  "use": "facts-only (specification and structure); no text or figures copied",
+  "read": "full-text",
+  "fetch_route": "fetch_source.py, one GET after robots.txt allowed; text layer read in full (58 pages)",
+  "note": "the results table is an image and the manual gives no equilibrium constant; the reference is K from the NIST-JANAF tables (read 2026-11-21 through fetch_source.py), an independent source for the server's own Gibbs-energy data"
+ },
+ "basis": {
+  "compounds": [
+   "Carbon monoxide",
+   "Hydrogen",
+   "Water",
+   "Carbon dioxide"
+  ],
+  "package_in_paper": "Raoult's Law",
+  "packages": [
+   "Raoult's Law",
+   "Peng-Robinson",
+   "SRK"
+  ],
+  "composition_basis": "mole",
+  "molar_mass_g_mol": {
+   "Carbon monoxide": 28.0101,
+   "Hydrogen": 2.01588,
+   "Water": 18.01527,
+   "Carbon dioxide": 44.0098
+  },
+  "molar_mass_source": "CoolProp 7",
+  "enthalpy_reference": "JANAF formation enthalpies, used for the duty only"
+ },
+ "streams": [
+  {
+   "id": "FEED",
+   "role": "feed",
+   "src": null,
+   "dst": "R",
+   "T": {
+    "value": 526.85,
+    "unit": "C",
+    "anchor": "FOSSEE DWSIM manual Exp 4: 800 K"
+   },
+   "P": {
+    "value": 100.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "FOSSEE DWSIM manual Exp 4: 1 bar"
+   },
+   "mass_flow": {
+    "value": 460.254,
+    "unit": "kg/h",
+    "anchor": "FOSSEE DWSIM manual Exp 4: 20 kmol/h of stoichiometric CO and H2O (10 each) converted with the stated molar masses"
+   },
+   "composition": {
+    "values": {
+     "Carbon monoxide": 0.5,
+     "Hydrogen": 0.0,
+     "Water": 0.5,
+     "Carbon dioxide": 0.0
+    },
+    "provenance": {
+     "Carbon monoxide": "reported",
+     "Hydrogen": "reported",
+     "Water": "reported",
+     "Carbon dioxide": "reported"
+    }
+   }
+  },
+  {
+   "id": "VAP",
+   "role": "product",
+   "src": "R",
+   "dst": null,
+   "phase": "vapor"
+  },
+  {
+   "id": "LIQ",
+   "role": "product",
+   "src": "R",
+   "dst": null,
+   "phase": "liquid"
+  }
+ ],
+ "units": [
+  {
+   "id": "R",
+   "type": "equilibrium_reactor",
+   "params": {
+    "thermal_mode": "isothermal",
+    "reaction": {
+     "name": "water-gas-shift",
+     "stoichiometry": {
+      "Carbon monoxide": -1,
+      "Water": -1,
+      "Carbon dioxide": 1,
+      "Hydrogen": 1
+     },
+     "base_compound": "Carbon monoxide",
+     "phase": "Vapor",
+     "basis": "partial pressure",
+     "units": "Pa",
+     "anchor": "FOSSEE DWSIM manual Exp 4: CO(g) + H2O(g) <-> CO2(g) + H2(g), base compound carbon monoxide, basis changed to partial pressure and phase to vapour; equilibrium constant from the server's Gibbs energies of formation (no expression given)"
+    }
+   }
+  }
+ ],
+ "reported": [
+  {
+   "name": "outlet_mass",
+   "kind": "stream_mass_kg_h",
+   "target": "VAP",
+   "value": 460.256,
+   "unit": "kg/h",
+   "anchor": "FOSSEE DWSIM manual Exp 4: outlet mass equals the feed mass",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "vapor_monoxide_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "VAP",
+   "value": 0.199149,
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 4: equilibrium composition: independent: NIST-JANAF tables (janaf.nist.gov) for CO, H2O and CO2 at 800 K: log Kf and fH, K = 10^(logKf(CO2) - logKf(CO) - logKf(H2O)); ideal gas, equal moles so pressure does not matter; computed 2026-11-21 (K = 4.2267, CO conversion 0.6728)",
+   "precision": "independent calculation",
+   "compound": "Carbon monoxide",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "vapor_hydrogen_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "VAP",
+   "value": 0.029466,
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 4: equilibrium composition: independent: NIST-JANAF tables (janaf.nist.gov) for CO, H2O and CO2 at 800 K: log Kf and fH, K = 10^(logKf(CO2) - logKf(CO) - logKf(H2O)); ideal gas, equal moles so pressure does not matter; computed 2026-11-21 (K = 4.2267, CO conversion 0.6728)",
+   "precision": "independent calculation",
+   "compound": "Hydrogen",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "vapor_water_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "VAP",
+   "value": 0.128087,
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 4: equilibrium composition: independent: NIST-JANAF tables (janaf.nist.gov) for CO, H2O and CO2 at 800 K: log Kf and fH, K = 10^(logKf(CO2) - logKf(CO) - logKf(H2O)); ideal gas, equal moles so pressure does not matter; computed 2026-11-21 (K = 4.2267, CO conversion 0.6728)",
+   "precision": "independent calculation",
+   "compound": "Water",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "vapor_dioxide_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "VAP",
+   "value": 0.643298,
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 4: equilibrium composition: independent: NIST-JANAF tables (janaf.nist.gov) for CO, H2O and CO2 at 800 K: log Kf and fH, K = 10^(logKf(CO2) - logKf(CO) - logKf(H2O)); ideal gas, equal moles so pressure does not matter; computed 2026-11-21 (K = 4.2267, CO conversion 0.6728)",
+   "precision": "independent calculation",
+   "compound": "Carbon dioxide",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "outlet_T",
+   "kind": "stream_T_C",
+   "target": "VAP",
+   "value": 526.85,
+   "unit": "C",
+   "anchor": "FOSSEE DWSIM manual Exp 4: isothermal reactor at the inlet temperature",
+   "precision": "specified",
+   "pass_rel": 0.001
+  },
+  {
+   "name": "reactor_duty",
+   "kind": "unit_duty",
+   "target": "R",
+   "value": -247845.9,
+   "unit": "kJ/h",
+   "anchor": "FOSSEE DWSIM manual Exp 4: isothermal duty = extent x heat of reaction at the reactor temperature (a physical expectation, not in the manual); independent: JANAF fH sums, -36.840 kJ/mol at 800 K x 6.728 kmol/h",
+   "precision": "independent calculation",
+   "pass_rel": 0.03
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.02,
+  "note": "2 percent on compositions and 3 percent on the duty, fixed before the run: JANAF logKf is tabulated to three decimals (about 0.4 percent in K) and DWSIM's constant comes from its own Gibbs-energy database"
+ },
+ "scenarios": [
+  {
+   "id": "pressure-2-bar",
+   "why": "the same reactor at 2 bar: the reaction has equal moles on both sides, so an ideal-gas equilibrium composition does not depend on pressure (a check on the equilibrium basis, not in the manual)",
+   "overrides": [
+    {
+     "stream": "FEED",
+     "path": [
+      "P",
+      "value"
+     ],
+     "set": 200.0
+    }
+   ]
+  },
+  {
+   "id": "1000K-2-bar",
+   "why": "the manual's self-learning question 1: equilibrium conversion at 1000 K and 2 bar; K from the same JANAF tables",
+   "overrides": [
+    {
+     "stream": "FEED",
+     "path": [
+      "T",
+      "value"
+     ],
+     "set": 726.85
+    },
+    {
+     "stream": "FEED",
+     "path": [
+      "P",
+      "value"
+     ],
+     "set": 200.0
+    },
+    {
+     "reported": "vapor_monoxide_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.276689
+    },
+    {
+     "reported": "vapor_hydrogen_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.023886
+    },
+    {
+     "reported": "vapor_water_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.177958
+    },
+    {
+     "reported": "vapor_dioxide_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.521467
+    },
+    {
+     "reported": "outlet_T",
+     "path": [
+      "value"
+     ],
+     "set": 726.85
+    },
+    {
+     "reported": "reactor_duty",
+     "path": [
+      "value"
+     ],
+     "set": -189689.5
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "K and heats of formation from NIST-JANAF tables; exact stoichiometric balance",
+  "human": false
+ },
+ "status": "built"
+}

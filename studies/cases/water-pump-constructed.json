@@ -1,0 +1,175 @@
+{
+ "id": "water-pump-constructed",
+ "source": {
+  "title": "Constructed exercise (not from a publication): a water pump from 1 atm to 5 bar",
+  "doi": null,
+  "url": "https://archive.nptel.ac.in/content/syllabus_pdf/103105210.pdf",
+  "licence": "none: my own specification",
+  "use": "specification written for this repo",
+  "read": "computed",
+  "fetch_route": "not applicable (no document)",
+  "note": "every input is my choice, flagged assumed. The topic comes from the IIT Kharagpur NPTEL course plan (Principles and Practices of Process Equipment and Plant Design, week 10: plant hydraulics, pumps and compressors); the lectures are videos and their transcripts could not be reached, so none of their content or numbers is used"
+ },
+ "basis": {
+  "compounds": [
+   "Water"
+  ],
+  "package_in_paper": "Steam Tables",
+  "packages": [
+   "Steam Tables",
+   "Peng-Robinson",
+   "SRK"
+  ],
+  "composition_basis": "mass",
+  "enthalpy_reference": "not used"
+ },
+ "streams": [
+  {
+   "id": "IN",
+   "role": "feed",
+   "src": null,
+   "dst": "U",
+   "T": {
+    "value": 25.0,
+    "unit": "C",
+    "assumed": "my choice"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "assumed": "my choice"
+   },
+   "mass_flow": {
+    "value": 36000.0,
+    "unit": "kg/h",
+    "assumed": "my choice"
+   },
+   "composition": {
+    "values": {
+     "Water": 1.0
+    },
+    "provenance": {
+     "Water": "assumed"
+    }
+   }
+  },
+  {
+   "id": "OUT",
+   "role": "product",
+   "src": "U",
+   "dst": null,
+   "P": {
+    "value": 500.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "assumed": "my choice"
+   }
+  }
+ ],
+ "units": [
+  {
+   "id": "U",
+   "type": "pump"
+  }
+ ],
+ "reported": [
+  {
+   "name": "pump_duty",
+   "kind": "unit_duty",
+   "target": "U",
+   "value": 19191.35,
+   "unit": "kJ/h",
+   "anchor": "independent: CoolProp IAPWS-95, isentropic enthalpy rise 0.5331 kJ/kg divided by an efficiency of 0.75 (DWSIM's default, to be confirmed by the run), x 36000 kg/h",
+   "precision": "independent calculation",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "outlet_T",
+   "kind": "stream_T_C",
+   "target": "OUT",
+   "value": 25.0392,
+   "unit": "C",
+   "anchor": "independent: outlet enthalpy at the outlet pressure, same efficiency",
+   "precision": "independent calculation",
+   "pass_rel": 0.01
+  },
+  {
+   "name": "outlet_P",
+   "kind": "stream_P_kPa",
+   "target": "OUT",
+   "value": 500.0,
+   "unit": "kPa",
+   "anchor": "the unit's specification",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.02,
+  "note": "duty 2 percent and outlet temperature 1 percent (of the value in C), fixed before the run; the efficiency of 0.75 is DWSIM's default, which I have not confirmed before this run"
+ },
+ "scenarios": [
+  {
+   "id": "discharge-20-bar",
+   "why": "the same pump to 20 bar: the duty scales with the pressure rise (independent calculation)",
+   "overrides": [
+    {
+     "stream": "OUT",
+     "path": [
+      "P",
+      "value"
+     ],
+     "set": 2000.0
+    },
+    {
+     "reported": "pump_duty",
+     "path": [
+      "value"
+     ],
+     "set": 91367.49
+    },
+    {
+     "reported": "outlet_T",
+     "path": [
+      "value"
+     ],
+     "set": 25.1871
+    },
+    {
+     "reported": "outlet_P",
+     "path": [
+      "value"
+     ],
+     "set": 2000.0
+    }
+   ]
+  },
+  {
+   "id": "flow-double",
+   "why": "twice the flow: the duty doubles, the outlet temperature does not change (independent calculation)",
+   "overrides": [
+    {
+     "stream": "IN",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 72000.0
+    },
+    {
+     "reported": "pump_duty",
+     "path": [
+      "value"
+     ],
+     "set": 38382.71
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "independent isentropic and isenthalpic calculations with CoolProp",
+  "human": false
+ },
+ "status": "built"
+}

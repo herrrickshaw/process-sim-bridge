@@ -1,0 +1,193 @@
+{
+ "id": "steam-condenser-cooler-independent",
+ "source": {
+  "title": "Steam condenser: independent calculation with CoolProp (IAPWS-95), no published case",
+  "doi": null,
+  "url": "http://www.coolprop.org",
+  "licence": "CoolProp is MIT licensed; the values are computed here",
+  "use": "computed reference values; nothing copied",
+  "read": "computed",
+  "fetch_route": "not a document: values computed 2026-11-20 with CoolProp PropsSI('H', 'T', ..., 'P', ..., 'Water') at 101.325 kPa",
+  "note": "a cooler case with a phase change, which the DWSIM tutorial's liquid-only cooler does not cover; the source of truth is the water property formulation, not another simulator"
+ },
+ "basis": {
+  "compounds": [
+   "Water"
+  ],
+  "package_in_paper": "Steam Tables",
+  "packages": [
+   "Steam Tables",
+   "Peng-Robinson",
+   "SRK"
+  ],
+  "composition_basis": "mole",
+  "molar_mass_g_mol": {
+   "Water": 18.01528
+  },
+  "molar_mass_source": "standard atomic weights",
+  "enthalpy_reference": "each simulator's own; the duty is the stream enthalpy difference times the mass flow, so the reference does not depend on it"
+ },
+ "streams": [
+  {
+   "id": "STEAM",
+   "role": "feed",
+   "src": null,
+   "dst": "C",
+   "T": {
+    "value": 120.0,
+    "unit": "C",
+    "anchor": "specified for this case"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "specified for this case"
+   },
+   "mass_flow": {
+    "value": 3600.0,
+    "unit": "kg/h",
+    "anchor": "DWSIM tutorial 'Heater and Cooler' (beginner/03-heater-cooler): 1.0 kg/s"
+   },
+   "composition": {
+    "values": {
+     "Water": 1.0
+    },
+    "provenance": {
+     "Water": "reported"
+    }
+   }
+  },
+  {
+   "id": "COND",
+   "role": "product",
+   "src": "C",
+   "dst": null,
+   "T": {
+    "value": 60.0,
+    "unit": "C",
+    "anchor": "specified for this case"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "specified for this case: no pressure drop"
+   }
+  }
+ ],
+ "units": [
+  {
+   "id": "C",
+   "type": "cooler"
+  }
+ ],
+ "reported": [
+  {
+   "name": "condenser_duty",
+   "kind": "unit_duty",
+   "target": "C",
+   "value": -8874904.327,
+   "unit": "kJ/h",
+   "anchor": "CoolProp IAPWS-95: h(60 C liquid) - h(120 C vapour) at 101.325 kPa, 1 kg/s (-2465.251 kW)",
+   "precision": "independent calculation"
+  },
+  {
+   "name": "cond_T",
+   "kind": "stream_T_C",
+   "target": "COND",
+   "value": 60.0,
+   "unit": "C",
+   "anchor": "specified outlet temperature",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "cond_vapor_fraction",
+   "kind": "stream_vapor_fraction",
+   "target": "COND",
+   "range": [
+    0.0,
+    0.001
+   ],
+   "unit": "-",
+   "anchor": "60 C is far below the saturation temperature of 99.97 C at 1 atm: all liquid"
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.005,
+  "note": "the duty is dominated by the latent heat of condensation (about 2257 kJ/kg), which each package predicts differently"
+ },
+ "scenarios": [
+  {
+   "id": "to-99C-liquid",
+   "why": "cool to 99 C, just below the saturation temperature: still full condensation, duty -2301.549 kW",
+   "overrides": [
+    {
+     "stream": "COND",
+     "path": [
+      "T",
+      "value"
+     ],
+     "set": 99.0
+    },
+    {
+     "reported": "cond_T",
+     "path": [
+      "value"
+     ],
+     "set": 99.0
+    },
+    {
+     "reported": "condenser_duty",
+     "path": [
+      "value"
+     ],
+     "set": -8285576.047
+    }
+   ]
+  },
+  {
+   "id": "to-105C-vapour",
+   "why": "cool only to 105 C: sensible heat of the vapour, no condensation, duty -30.572 kW (a small number difference of two enthalpies, so relative errors look larger)",
+   "overrides": [
+    {
+     "stream": "COND",
+     "path": [
+      "T",
+      "value"
+     ],
+     "set": 105.0
+    },
+    {
+     "reported": "cond_T",
+     "path": [
+      "value"
+     ],
+     "set": 105.0
+    },
+    {
+     "reported": "condenser_duty",
+     "path": [
+      "value"
+     ],
+     "set": -110057.601
+    },
+    {
+     "reported": "cond_vapor_fraction",
+     "path": [
+      "range"
+     ],
+     "set": [
+      0.999,
+      1.0
+     ]
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "duties recomputed independently with CoolProp (IAPWS-95); the outlet specification is read back",
+  "human": false
+ },
+ "status": "built"
+}

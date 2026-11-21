@@ -1,0 +1,217 @@
+{
+ "id": "toluene-counter-current-exchanger-constructed",
+ "source": {
+  "title": "Constructed exercise (not from a publication): toluene cooled by toluene in a counter-current exchanger, patterned on the FOSSEE and DWSIM exchanger exercises",
+  "doi": null,
+  "url": "https://dwsim.org/tutorials/en/intermediate/02-heat-exchanger-design.html",
+  "licence": "none: my own specification",
+  "use": "specification written for this repo; the structure follows the tutorial",
+  "read": "computed",
+  "fetch_route": "not applicable (no document)",
+  "note": "every input is my choice, flagged assumed. It exists to run an organic liquid through the exchanger path; FOSSEE Exp 10 uses styrene, which CoolProp does not have, so it has no independent oracle"
+ },
+ "basis": {
+  "compounds": [
+   "Toluene"
+  ],
+  "package_in_paper": "Peng-Robinson",
+  "packages": [
+   "Peng-Robinson",
+   "SRK",
+   "Raoult's Law"
+  ],
+  "composition_basis": "mass",
+  "enthalpy_reference": "not used; outlet temperatures follow from an enthalpy balance"
+ },
+ "streams": [
+  {
+   "id": "HOT_IN",
+   "role": "feed",
+   "side": "hot",
+   "src": null,
+   "dst": "X",
+   "T": {
+    "value": 150.0,
+    "unit": "C",
+    "anchor": "assumed: constructed exercise, no source"
+   },
+   "P": {
+    "value": 1000.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "assumed: constructed exercise, no source"
+   },
+   "mass_flow": {
+    "value": 7200.0,
+    "unit": "kg/h",
+    "anchor": "assumed: constructed exercise, no source"
+   },
+   "composition": {
+    "values": {
+     "Toluene": 1.0
+    },
+    "provenance": {
+     "Toluene": "assumed"
+    }
+   }
+  },
+  {
+   "id": "COLD_IN",
+   "role": "feed",
+   "side": "cold",
+   "src": null,
+   "dst": "X",
+   "T": {
+    "value": 30.0,
+    "unit": "C",
+    "anchor": "assumed: constructed exercise, no source"
+   },
+   "P": {
+    "value": 500.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "assumed: constructed exercise, no source"
+   },
+   "mass_flow": {
+    "value": 10800.0,
+    "unit": "kg/h",
+    "anchor": "assumed: constructed exercise, no source"
+   },
+   "composition": {
+    "values": {
+     "Toluene": 1.0
+    },
+    "provenance": {
+     "Toluene": "assumed"
+    }
+   }
+  },
+  {
+   "id": "HOT_OUT",
+   "role": "product",
+   "side": "hot",
+   "src": "X",
+   "dst": null
+  },
+  {
+   "id": "COLD_OUT",
+   "role": "product",
+   "side": "cold",
+   "src": "X",
+   "dst": null
+  }
+ ],
+ "units": [
+  {
+   "id": "X",
+   "type": "exchanger",
+   "params": {
+    "mode": "UA",
+    "U_W_m2K": 800.0,
+    "area_m2": 5.0,
+    "flow": "CounterCurrent",
+    "hot_dP_Pa": 20000.0,
+    "cold_dP_Pa": 20000.0,
+    "assumed": "all values chosen by me: U 800 W/m2K x 5 m2 = 4000 W/K, drops 20 kPa each side"
+   }
+  }
+ ],
+ "reported": [
+  {
+   "name": "hot_outlet_T",
+   "kind": "stream_T_C",
+   "target": "HOT_OUT",
+   "value": 86.7556,
+   "unit": "C",
+   "anchor": "independent: UA-mode solution with CoolProp Toluene enthalpies (energy balances and Q = UA x LMTD, counter-current), computed 2026-11-21; hot outlet temperature",
+   "precision": "independent calculation",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "cold_outlet_T",
+   "kind": "stream_T_C",
+   "target": "COLD_OUT",
+   "value": 77.6651,
+   "unit": "C",
+   "anchor": "independent: UA-mode solution with CoolProp Toluene enthalpies (energy balances and Q = UA x LMTD, counter-current), computed 2026-11-21; cold outlet temperature",
+   "precision": "independent calculation",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "hot_side_duty",
+   "kind": "unit_duty",
+   "target": "X",
+   "value": -924921.2,
+   "unit": "kJ/h",
+   "anchor": "independent: UA-mode solution with CoolProp Toluene enthalpies (energy balances and Q = UA x LMTD, counter-current), computed 2026-11-21; heat removed from the hot side, 256.9226 kW (negative: the hot stream loses enthalpy)",
+   "precision": "independent calculation",
+   "pass_rel": 0.03
+  },
+  {
+   "name": "hot_outlet_P",
+   "kind": "stream_P_kPa",
+   "target": "HOT_OUT",
+   "value": 980.0,
+   "unit": "kPa",
+   "anchor": "independent: UA-mode solution with CoolProp Toluene enthalpies (energy balances and Q = UA x LMTD, counter-current), computed 2026-11-21; inlet pressure minus the hot-side pressure drop",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "cold_outlet_P",
+   "kind": "stream_P_kPa",
+   "target": "COLD_OUT",
+   "value": 480.0,
+   "unit": "kPa",
+   "anchor": "independent: UA-mode solution with CoolProp Toluene enthalpies (energy balances and Q = UA x LMTD, counter-current), computed 2026-11-21; inlet pressure minus the cold-side pressure drop",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.03,
+  "note": "temperatures 2 percent (of the value in C) and the duty 3 percent, fixed before the run; the paper package is itself an assumption (a cubic equation of state is the usual choice for hydrocarbons), so a miss is a finding about the package, not about the case"
+ },
+ "scenarios": [
+  {
+   "id": "co-current",
+   "why": "parallel flow: independent co-current solution",
+   "overrides": [
+    {
+     "unit": "X",
+     "path": [
+      "params",
+      "flow"
+     ],
+     "set": "CoCurrent"
+    },
+    {
+     "reported": "hot_outlet_T",
+     "path": [
+      "value"
+     ],
+     "set": 94.0614
+    },
+    {
+     "reported": "cold_outlet_T",
+     "path": [
+      "value"
+     ],
+     "set": 72.6534
+    },
+    {
+     "reported": "hot_side_duty",
+     "path": [
+      "value"
+     ],
+     "set": -823635.8
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "independent UA-mode solution with CoolProp toluene",
+  "human": false
+ },
+ "status": "built"
+}

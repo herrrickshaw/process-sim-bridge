@@ -1,0 +1,439 @@
+{
+ "id": "mch-extractive-distillation-aspen-getting-started",
+ "source": {
+  "title": "Aspen Plus 2006.5, Getting Started Building and Running a Process Model, chapters 2 to 4 (methylcyclohexane recovery column by extractive distillation with phenol)",
+  "doi": null,
+  "url": null,
+  "licence": "AspenTech documentation, copyright 2007 Aspen Technology, Inc., all rights reserved; supplied by the user from a local copy; facts and numbers only, no text or figures copied",
+  "use": "facts-only (specification and printed results)",
+  "read": "full-text",
+  "local_copy": {
+   "filename": "AspenPlusProcModel2006_5-Start.pdf",
+   "sha256": "829911062efc4573ef06fbdee64e80a97a47cf71aae46d73efd44fcb7e511732",
+   "supplied_by": "the repository owner, from a local copy",
+   "pages": "chapters 2 to 4 (document pages 22 to 63)"
+  },
+  "fetch_route": "file supplied by the repository owner; pages 41 to 70 of the PDF read as images",
+  "note": "BLOCKED on this repository's backends: a 22-stage RadFrac extractive column with a phenol solvent feed above stage 7 is not available (the DWSIM server's rigorous column could not be given a feed stage here, see architecture doc section 13). The case is kept as a recorded answer key for a column-capable backend (Aspen or a fixed DWSIM). Property method UNIFAC (stated in the guide). Two printed values disagree: the design-specification table gives a phenol flow of 1515.07763 lbmol/h and the text beside it says approximately 1517.1; linear interpolation of the printed sensitivity table to 98.0 percent gives 1516.9"
+ },
+ "basis": {
+  "compounds": [
+   "Toluene",
+   "Phenol",
+   "Methylcyclohexane"
+  ],
+  "package_in_paper": "UNIFAC",
+  "packages": [
+   "UNIFAC"
+  ],
+  "composition_basis": "mole",
+  "molar_mass_g_mol": {
+   "Toluene": 92.1384,
+   "Phenol": 94.1112,
+   "Methylcyclohexane": 98.1882
+  },
+  "molar_mass_source": "toluene and phenol standard values, MCH as printed (98.1882); they reproduce the printed stream 3 mass flow (19605.002 lb/h) to 0.0005 percent",
+  "enthalpy_reference": "not used"
+ },
+ "streams": [
+  {
+   "id": "FEED",
+   "role": "feed",
+   "src": null,
+   "dst": "B1",
+   "T": {
+    "value": 104.4444,
+    "unit": "C",
+    "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): stream 1 MCH-toluene feed 220 F"
+   },
+   "P": {
+    "value": 137.8951,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): 20 psia"
+   },
+   "mass_flow": {
+    "value": 17266.139,
+    "unit": "kg/h",
+    "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): 200 lbmol/h toluene and 200 lbmol/h MCH"
+   },
+   "composition": {
+    "values": {
+     "Toluene": 0.5,
+     "Phenol": 0.0,
+     "Methylcyclohexane": 0.5
+    },
+    "provenance": {
+     "Toluene": "reported",
+     "Phenol": "reported",
+     "Methylcyclohexane": "reported"
+    }
+   }
+  },
+  {
+   "id": "SOLVENT",
+   "role": "feed",
+   "src": null,
+   "dst": "B1",
+   "T": {
+    "value": 104.4444,
+    "unit": "C",
+    "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): stream 2 phenol 220 F"
+   },
+   "P": {
+    "value": 137.8951,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): 20 psia"
+   },
+   "mass_flow": {
+    "value": 51225.747,
+    "unit": "kg/h",
+    "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): 1200 lbmol/h phenol (base case)"
+   },
+   "composition": {
+    "values": {
+     "Toluene": 0.0,
+     "Phenol": 1.0,
+     "Methylcyclohexane": 0.0
+    },
+    "provenance": {
+     "Toluene": "reported",
+     "Phenol": "reported",
+     "Methylcyclohexane": "reported"
+    }
+   }
+  },
+  {
+   "id": "DIST",
+   "role": "product",
+   "src": "B1",
+   "dst": null
+  },
+  {
+   "id": "BOTTOMS",
+   "role": "product",
+   "src": "B1",
+   "dst": null
+  }
+ ],
+ "units": [
+  {
+   "id": "B1",
+   "type": "column",
+   "params": {
+    "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): RadFrac: 22 equilibrium stages, total condenser, distillate 200 lbmol/h, reflux ratio 8 (mole), feed 1 above stage 14, feed 2 above stage 7, condenser 16 psia, reboiler 20.2 psia, kettle reboiler",
+    "stages": 22,
+    "condenser": "total",
+    "distillate_lbmol_h": 200,
+    "reflux_ratio_mole": 8,
+    "feed_stage": {
+     "FEED": 14,
+     "SOLVENT": 7
+    },
+    "P_condenser_psia": 16,
+    "P_reboiler_psia": 20.2
+   }
+  }
+ ],
+ "reported": [
+  {
+   "name": "distillate_MCH_mole_fraction",
+   "kind": "stream_mole_fraction",
+   "target": "DIST",
+   "compound": "Methylcyclohexane",
+   "value": 0.97257198,
+   "unit": "-",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): chapter 3 sensitivity table, phenol 1200 lbmol/h: MCH purity in distillate 0.97257198 (chapter 2 text: a little better than 97 percent)",
+   "precision": "printed, 8 digits",
+   "pass_rel": 0.002
+  },
+  {
+   "name": "distillate_toluene_mole_fraction",
+   "kind": "stream_mole_fraction",
+   "target": "DIST",
+   "compound": "Toluene",
+   "value": 0.0261,
+   "unit": "-",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): chapter 2 stream 3 results: toluene 5.219 of 200.000 lbmol/h",
+   "precision": "printed, 4 digits",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "distillate_phenol_mole_fraction",
+   "kind": "stream_mole_fraction",
+   "target": "DIST",
+   "compound": "Phenol",
+   "value": 0.00131,
+   "unit": "-",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): chapter 2 stream 3 results: phenol 0.262 of 200.000 lbmol/h",
+   "precision": "printed, 3 digits",
+   "pass_rel": 0.05
+  },
+  {
+   "name": "distillate_mass_flow",
+   "kind": "stream_mass_kg_h",
+   "target": "DIST",
+   "value": 8892.679,
+   "unit": "kg/h",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): chapter 2 stream 3 results: mass flow 19605.002 lb/h",
+   "precision": "printed",
+   "pass_rel": 0.002
+  },
+  {
+   "name": "distillate_T",
+   "kind": "stream_T_C",
+   "target": "DIST",
+   "value": 103.778,
+   "unit": "C",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): chapter 2 stream 3 results: 218.8 F at 16 psi (condenser/top stage 218.828654 F)",
+   "precision": "printed",
+   "pass_rel": 0.01
+  },
+  {
+   "name": "distillate_P",
+   "kind": "stream_P_kPa",
+   "target": "DIST",
+   "value": 110.316,
+   "unit": "kPa",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapters 2 to 4 (MCH recovery column): condenser pressure 16 psia",
+   "precision": "exact",
+   "pass_rel": 0.001
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.01,
+  "note": "tolerances fixed before any run; the case cannot run on the current backends"
+ },
+ "scenarios": [
+  {
+   "id": "phenol-1300",
+   "why": "chapter 3 sensitivity analysis: phenol solvent flow 1300 lbmol/h, printed MCH purity 0.9753479",
+   "overrides": [
+    {
+     "stream": "SOLVENT",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 55494.559
+    },
+    {
+     "reported": "distillate_MCH_mole_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.9753479
+    }
+   ],
+   "drop_reported": [
+    "distillate_toluene_mole_fraction",
+    "distillate_phenol_mole_fraction",
+    "distillate_mass_flow",
+    "distillate_T",
+    "distillate_P"
+   ]
+  },
+  {
+   "id": "phenol-1400",
+   "why": "chapter 3 sensitivity analysis: phenol solvent flow 1400 lbmol/h, printed MCH purity 0.97769849",
+   "overrides": [
+    {
+     "stream": "SOLVENT",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 59763.371
+    },
+    {
+     "reported": "distillate_MCH_mole_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.97769849
+    }
+   ],
+   "drop_reported": [
+    "distillate_toluene_mole_fraction",
+    "distillate_phenol_mole_fraction",
+    "distillate_mass_flow",
+    "distillate_T",
+    "distillate_P"
+   ]
+  },
+  {
+   "id": "phenol-1500",
+   "why": "chapter 3 sensitivity analysis: phenol solvent flow 1500 lbmol/h, printed MCH purity 0.97970757",
+   "overrides": [
+    {
+     "stream": "SOLVENT",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 64032.183
+    },
+    {
+     "reported": "distillate_MCH_mole_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.97970757
+    }
+   ],
+   "drop_reported": [
+    "distillate_toluene_mole_fraction",
+    "distillate_phenol_mole_fraction",
+    "distillate_mass_flow",
+    "distillate_T",
+    "distillate_P"
+   ]
+  },
+  {
+   "id": "phenol-1600",
+   "why": "chapter 3 sensitivity analysis: phenol solvent flow 1600 lbmol/h, printed MCH purity 0.98143328",
+   "overrides": [
+    {
+     "stream": "SOLVENT",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 68300.996
+    },
+    {
+     "reported": "distillate_MCH_mole_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.98143328
+    }
+   ],
+   "drop_reported": [
+    "distillate_toluene_mole_fraction",
+    "distillate_phenol_mole_fraction",
+    "distillate_mass_flow",
+    "distillate_T",
+    "distillate_P"
+   ]
+  },
+  {
+   "id": "phenol-1700",
+   "why": "chapter 3 sensitivity analysis: phenol solvent flow 1700 lbmol/h, printed MCH purity 0.98292353",
+   "overrides": [
+    {
+     "stream": "SOLVENT",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 72569.808
+    },
+    {
+     "reported": "distillate_MCH_mole_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.98292353
+    }
+   ],
+   "drop_reported": [
+    "distillate_toluene_mole_fraction",
+    "distillate_phenol_mole_fraction",
+    "distillate_mass_flow",
+    "distillate_T",
+    "distillate_P"
+   ]
+  },
+  {
+   "id": "phenol-1800",
+   "why": "chapter 3 sensitivity analysis: phenol solvent flow 1800 lbmol/h, printed MCH purity 0.98421708",
+   "overrides": [
+    {
+     "stream": "SOLVENT",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 76838.62
+    },
+    {
+     "reported": "distillate_MCH_mole_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.98421708
+    }
+   ],
+   "drop_reported": [
+    "distillate_toluene_mole_fraction",
+    "distillate_phenol_mole_fraction",
+    "distillate_mass_flow",
+    "distillate_T",
+    "distillate_P"
+   ]
+  },
+  {
+   "id": "phenol-1900",
+   "why": "chapter 3 sensitivity analysis: phenol solvent flow 1900 lbmol/h, printed MCH purity 0.98534612",
+   "overrides": [
+    {
+     "stream": "SOLVENT",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 81107.432
+    },
+    {
+     "reported": "distillate_MCH_mole_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.98534612
+    }
+   ],
+   "drop_reported": [
+    "distillate_toluene_mole_fraction",
+    "distillate_phenol_mole_fraction",
+    "distillate_mass_flow",
+    "distillate_T",
+    "distillate_P"
+   ]
+  },
+  {
+   "id": "phenol-2000",
+   "why": "chapter 3 sensitivity analysis: phenol solvent flow 2000 lbmol/h, printed MCH purity 0.98633569",
+   "overrides": [
+    {
+     "stream": "SOLVENT",
+     "path": [
+      "mass_flow",
+      "value"
+     ],
+     "set": 85376.245
+    },
+    {
+     "reported": "distillate_MCH_mole_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.98633569
+    }
+   ],
+   "drop_reported": [
+    "distillate_toluene_mole_fraction",
+    "distillate_phenol_mole_fraction",
+    "distillate_mass_flow",
+    "distillate_T",
+    "distillate_P"
+   ]
+  }
+ ],
+ "review": {
+  "method": "values transcribed from the printed results; molar masses checked by reproducing the printed stream 3 mass flow",
+  "human": false
+ },
+ "status": "blocked"
+}

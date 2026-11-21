@@ -13,3 +13,4 @@ case.json
 *.hsc
 *.bkp
 .env
+studies/raw/

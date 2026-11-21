@@ -1,0 +1,193 @@
+{
+ "about": "Registry of design-criteria guardrails. A rule is ACTIVE only if its text was read from a public source or its numbers are supplied by the user from a licensed copy with the clause and edition named. Nothing is filled in from memory. Guardrails report; they never change a simulation result or a published number. Tier 'advisory' rules come from trade articles and forum discussions, not standards: they never produce a violation, only an advisory, and each lists how its sources were read (read, snippet-only, or blocked by a bot challenge, which is never bypassed). Disagreement between sources is recorded with the rule.",
+ "rules": [
+  {
+   "id": "osha-1910.119-d2iD-safe-limits",
+   "standard": "OSHA 29 CFR 1910.119 (Process Safety Management)",
+   "clause": "(d)(2)(i)(D) safe upper and lower limits for items such as temperatures, pressures, flows or compositions",
+   "text_status": "public-text-read",
+   "source": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.119",
+   "read": "2026-11-21",
+   "check": "declared_limits",
+   "how": "the case declares safe limits per stream in design_limits.streams (T_C, P_kPa, mass_kg_h, with an anchor); every simulated stream is checked against them in every scenario and package. The regulation sets no numbers: the limits are the process's own."
+  },
+  {
+   "id": "osha-1910.119-d2iE-deviation-coverage",
+   "standard": "OSHA 29 CFR 1910.119",
+   "clause": "(d)(2)(i)(E) evaluation of the consequences of deviations; (f)(1)(ii) operating limits: consequences of deviation",
+   "text_status": "public-text-read",
+   "source": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.119",
+   "read": "2026-11-21",
+   "check": "deviation_coverage",
+   "how": "a case that simulates scenarios (deviations) but declares no safe limits is reported as a coverage gap, because the deviations then have no consequence criterion."
+  },
+  {
+   "id": "osha-1910.119-d3iG-material-balance",
+   "standard": "OSHA 29 CFR 1910.119",
+   "clause": "(d)(3)(i)(G) material and energy balances for processes built after May 26, 1992",
+   "text_status": "public-text-read",
+   "source": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.119",
+   "read": "2026-11-21",
+   "check": "mass_balance",
+   "tolerance_rel": 0.001,
+   "tolerance_source": "tool default, not from the regulation (it sets no number)",
+   "how": "feed mass equals product mass in the simulated flowsheet."
+  },
+  {
+   "id": "osha-1910.106-a19-flammable-category",
+   "standard": "OSHA 29 CFR 1910.106 (Flammable liquids)",
+   "clause": "(a)(19)(i) to (v) categories 1 to 4 by flashpoint and boiling point; liquids heated for use to within 30 F (16.7 C) of their flashpoint are handled as the next more hazardous category",
+   "text_status": "public-text-read",
+   "source": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.106",
+   "read": "2026-11-21",
+   "check": "flammable_category",
+   "how": "needs flashpoint and boiling point per compound in design_limits.compounds (from a safety data sheet, with an anchor); applies to streams that are at least 99.9 % mass one such compound, since a mixture's flashpoint is not available. Reports the category and whether the simulated temperature triggers the heated-near-flashpoint rule: an information status, not a violation."
+  },
+  {
+   "id": "api-520-521-relief-overpressure",
+   "standard": "API Standard 520 / 521 (pressure-relieving systems), ASME BPVC overpressure",
+   "clause": "allowable accumulation over the set pressure",
+   "text_status": "paywalled-not-read",
+   "source": "not read: the standards are sold or behind a free-read-only login, which this tool does not bypass",
+   "read": null,
+   "check": "relief_overpressure",
+   "how": "ACTIVE ONLY WHEN the case supplies design_limits.relief.<unit> = {set_pressure_kPa, accumulation_pct, anchor naming the clause and edition} from a licensed copy; the stream pressure at that unit is then checked against set pressure x (1 + accumulation/100). No accumulation value is built in."
+  },
+  {
+   "id": "nfpa-30-flammable-liquids",
+   "standard": "NFPA 30 and related NFPA codes",
+   "clause": "not read",
+   "text_status": "paywalled-not-read",
+   "source": "not read: free-access view requires a login, which this tool does not use",
+   "read": null,
+   "check": null,
+   "how": "registered so the gap is visible; no check is implemented until the user supplies clauses and numbers from a licensed copy."
+  },
+  {
+   "id": "forum-vessel-design-pressure-margin",
+   "tier": "advisory",
+   "standard": "none: engineering rule of thumb",
+   "clause": "design pressure at least the maximum operating pressure plus the greater of 10 % or 25 psi (172.4 kPa)",
+   "text_status": "forum-snippet-only",
+   "read": null,
+   "check": "vessel_design_pressure",
+   "sources": [
+    {
+     "url": "https://www.cheresources.com/invision/topic/2581-psvoperating-pressuremawp/",
+     "how_read": "blocked by a bot challenge; known only from a search-result summary",
+     "says": "about 10 % or 25 psi above maximum operating pressure, whichever is greater; the 10 % suits higher pressures, 25 psi lower"
+    },
+    {
+     "url": "https://nufia.library.northwestern.edu/downloads/5t34sj794?locale=en",
+     "how_read": "search-result summary only (a file download, not fetched)",
+     "says": "the same greater-of rule in a university process-design document"
+    },
+    {
+     "url": "https://www.eng-tips.com/threads/design-margin-of-pressure-vessle.512198/latest",
+     "how_read": "blocked by a bot challenge; search-result summary only",
+     "says": "the margin is owner preference, not set by ASME VIII; 10 % is typical"
+    }
+   ],
+   "disagreement": "a '1.1 x or 30 psi' variant appears in a forum question with no reference found; the 10 %-or-25-psi form is the one repeated across sources",
+   "how": "needs design_limits.vessels.<unit>: operating stream, design pressure with its basis (gauge or absolute) and an anchor; the rule is applied to gauge pressure (the sources do not say; this is my assumption). Advisory if the design pressure is below the rule."
+  },
+  {
+   "id": "forum-vessel-design-temperature-margin",
+   "tier": "advisory",
+   "standard": "none: engineering rule of thumb",
+   "clause": "design temperature above maximum operating temperature by about 15 to 20 C (SPE) or 28 C / 50 F (forum replies and a university process-design document)",
+   "text_status": "forum-snippet-only",
+   "read": null,
+   "check": "vessel_design_temperature",
+   "sources": [
+    {
+     "url": "https://pubs.spe.org/en/ogf/ogf-article-detail/?art=4919",
+     "how_read": "search-result summary only",
+     "says": "usually 15 to 20 C above the maximum continuous operating temperature"
+    },
+    {
+     "url": "https://www.eng-tips.com/threads/design-temperaturevs-operating-temperature.368061",
+     "how_read": "blocked by a bot challenge; search-result summary only",
+     "says": "50 F below design temperature recommended in some practices; the margin is the owner's judgement"
+    }
+   ],
+   "disagreement": "15 to 20 C, 28 C and 50 F are all quoted; pipelines and exchangers cited with 10 C and 30 C",
+   "how": "needs design_limits.vessels.<unit>.design_temperature_C and an operating stream: pass at or above +27.8 C, advisory between +15 and +27.8 C (inside the quoted range), advisory below +15 C."
+  },
+  {
+   "id": "pump-npsha-vs-npshr",
+   "tier": "definition",
+   "standard": "none: definition of NPSHR",
+   "clause": "NPSH available below NPSH required means the pump loses more than the 3 % head used to define NPSHR",
+   "text_status": "definition",
+   "read": null,
+   "check": "pump_npsh",
+   "sources": [
+    {
+     "url": "https://www.pumpsandsystems.com/node/6002",
+     "how_read": "search-result summary only",
+     "says": "published NPSHR is usually based on a 3 % head drop"
+    }
+   ],
+   "how": "needs design_limits.pumps.<unit>: suction stream, NPSHR (m, from the pump data sheet), liquid vapour pressure (kPa) and density (kg/m3) with anchors; NPSHA = (suction pressure - vapour pressure) / (density x g) + static head, friction ignored. A ratio below 1.0 is a violation by definition."
+  },
+  {
+   "id": "trade-pump-npsh-margin-ratio",
+   "tier": "advisory",
+   "standard": "none: trade article",
+   "clause": "NPSH margin ratio NPSHA/NPSHR: typically 1.0 to 1.3 minimum for low suction energy; 1.1 to 1.5 with mitigating factors; 1.5 to 2.0 for cold or warm water; 2.0 to 2.5 for very high suction energy",
+   "text_status": "trade-article-read",
+   "read": "2026-11-21",
+   "check": "pump_npsh",
+   "sources": [
+    {
+     "url": "https://www.waterworld.com/drinking-water-treatment/potable-water-quality/article/16190903/key-considerations-to-help-determine-optimum-npsh-margin-part-2",
+     "how_read": "read in full from a Wayback copy (the live page gave a bot challenge, which was not bypassed)",
+     "says": "the ranges above; reliability trends up to a ratio near 4.0"
+    }
+   ],
+   "disagreement": "another trade source gives 1.2 to 1.6 to cover the 3 % head drop, and a vendor page a fixed 1 m margin (not verified); the Hydraulic Institute range is wider",
+   "how": "the pump entry declares suction_energy: low, mitigated, cold_warm_water or very_high; ratio below the lower end is an advisory, inside the range is information, above it passes."
+  },
+  {
+   "id": "trade-valve-pressure-drop-fraction",
+   "tier": "advisory",
+   "standard": "none: trade article and forum",
+   "clause": "control valve pressure drop at least 20 % of the total system pressure drop or 10 psi (0.7 bar), whichever is greater",
+   "text_status": "trade-article-read",
+   "read": "2026-11-21",
+   "check": "valve_drop",
+   "sources": [
+    {
+     "url": "https://www.thechemicalengineer.com/features/rules-of-thumb-process-control-valves",
+     "how_read": "the opening of the article read; the rest is behind a login",
+     "says": "20 % of total system pressure drop or 10 psi if the engineer can dictate it; valves are most responsive 60 to 80 % open; rules of thumb are for preliminary selection only"
+    },
+    {
+     "url": "https://ask.instrumentationtools.com/t/rules-of-thumb-for-control-valves-sizing-and-selection/6065",
+     "how_read": "page text is script-rendered and came back empty; search-result summary only",
+     "says": "33 % of dynamic losses or 15 psi for pumped circuits; other bases for compressors and steam"
+    }
+   ],
+   "disagreement": "20 %, 30 %, 33 % and 50 % of the friction drop are all quoted, on different bases (total system or friction only)",
+   "how": "needs design_limits.valves.<unit>: inlet stream, outlet stream and the total system pressure drop with an anchor; the valve drop comes from the simulation. Advisory below the 20 % / 0.7 bar rule, information between it and 33 %."
+  },
+  {
+   "id": "trade-valve-flashing",
+   "tier": "advisory",
+   "standard": "none: trade articles",
+   "clause": "a liquid that flashes across a valve (downstream pressure at or below vapour pressure) needs a full flashing and cavitation calculation, not a rule of thumb",
+   "text_status": "forum-snippet-only",
+   "read": null,
+   "check": "valve_flashing",
+   "sources": [
+    {
+     "url": "https://www.bray.com/docs/default-source/webinar-presentations/control-valve-sizing-theory-cavitation-flashing.pdf",
+     "how_read": "search-result summary only",
+     "says": "flashing leaves a liquid-gas mixture downstream; cavitation can occur below the choked pressure drop"
+    }
+   ],
+   "how": "for any valve with inlet and outlet streams declared in design_limits.valves, an outlet vapour fraction above the inlet's by more than 0.001 is reported as information."
+  }
+ ]
+}

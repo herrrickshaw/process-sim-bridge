@@ -1,0 +1,186 @@
+{
+ "id": "methanol-water-adiabatic-flash-aspen-getting-started",
+ "source": {
+  "title": "Aspen Plus 2006.5, Getting Started Building and Running a Process Model, chapter 1 (the Flash example)",
+  "doi": null,
+  "url": null,
+  "licence": "AspenTech documentation, copyright 2007 Aspen Technology, Inc., all rights reserved; supplied by the user from a local copy; facts and numbers only, no text or figures copied",
+  "use": "facts-only (specification and printed results)",
+  "read": "full-text",
+  "fetch_route": "file supplied by the repository owner; pages 13 to 25 of the PDF read as images",
+  "note": "the property method of flash.bkp is NOT stated in the pages read (the template said Property Method: None); package_in_paper is therefore recorded as not stated and paper_package_within_tol does not apply. The flash block runs at 1 atm with zero duty on a feed at 20 psia, which is a valve (isenthalpic pressure drop) followed by an adiabatic flash",
+  "local_copy": {
+   "filename": "AspenPlusProcModel2006_5-Start.pdf",
+   "sha256": "829911062efc4573ef06fbdee64e80a97a47cf71aae46d73efd44fcb7e511732",
+   "supplied_by": "the repository owner, from a local copy",
+   "pages": "chapter 1 (document pages 6 to 21)"
+  }
+ },
+ "basis": {
+  "compounds": [
+   "Methanol",
+   "Water"
+  ],
+  "package_in_paper": "not stated",
+  "packages": [
+   "NRTL",
+   "UNIQUAC",
+   "Peng-Robinson",
+   "SRK",
+   "Raoult's Law"
+  ],
+  "composition_basis": "mole",
+  "molar_mass_g_mol": {
+   "Methanol": 32.042,
+   "Water": 18.015
+  },
+  "molar_mass_source": "inferred: these molar masses reproduce the printed vapour mass flow (309.677 lb/h) from the printed mole flows to 0.005 percent",
+  "enthalpy_reference": "not used"
+ },
+ "streams": [
+  {
+   "id": "FEED",
+   "role": "feed",
+   "src": null,
+   "dst": "V",
+   "T": {
+    "value": 82.2222,
+    "unit": "C",
+    "anchor": "Aspen Plus 2006.5 Getting Started, chapter 1: stream 1 temperature 180 F"
+   },
+   "P": {
+    "value": 137.8951,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "Aspen Plus 2006.5 Getting Started, chapter 1: stream 1 pressure 20 psia"
+   },
+   "mass_flow": {
+    "value": 1135.274,
+    "unit": "kg/h",
+    "anchor": "Aspen Plus 2006.5 Getting Started, chapter 1: 50 lbmol/h methanol + 50 lbmol/h water, converted with the inferred molar masses"
+   },
+   "composition": {
+    "values": {
+     "Methanol": 0.5,
+     "Water": 0.5
+    },
+    "provenance": {
+     "Methanol": "reported",
+     "Water": "reported"
+    }
+   }
+  },
+  {
+   "id": "FLASHED",
+   "role": "intermediate",
+   "src": "V",
+   "dst": "SEP",
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "Aspen Plus 2006.5 Getting Started, chapter 1: block B1 flash pressure 1 atm; the feed at 20 psia is brought down to it"
+   }
+  },
+  {
+   "id": "VAPOR",
+   "role": "product",
+   "src": "SEP",
+   "dst": null,
+   "phase": "vapor"
+  },
+  {
+   "id": "LIQUID",
+   "role": "product",
+   "src": "SEP",
+   "dst": null,
+   "phase": "liquid"
+  }
+ ],
+ "units": [
+  {
+   "id": "V",
+   "type": "valve"
+  },
+  {
+   "id": "SEP",
+   "type": "separator"
+  }
+ ],
+ "reported": [
+  {
+   "name": "flash_T",
+   "kind": "stream_T_C",
+   "target": "FLASHED",
+   "value": 74.0462,
+   "unit": "C",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapter 1: block B1 results summary: outlet temperature 165.28321 F",
+   "precision": "8 significant figures as printed",
+   "pass_rel": 0.01
+  },
+  {
+   "name": "flash_vapor_fraction",
+   "kind": "stream_vapor_fraction",
+   "target": "FLASHED",
+   "value": 0.10756625,
+   "unit": "-",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapter 1: block B1 results summary: vapor fraction 0.10756625 (mole basis)",
+   "precision": "printed",
+   "pass_rel": 0.05
+  },
+  {
+   "name": "vapor_mass_flow",
+   "kind": "stream_mass_kg_h",
+   "target": "VAPOR",
+   "value": 140.4671,
+   "unit": "kg/h",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapter 1: stream 2 results: mass flow 309.677 lb/h",
+   "precision": "printed",
+   "pass_rel": 0.05
+  },
+  {
+   "name": "vapor_methanol_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "VAPOR",
+   "compound": "Methanol",
+   "value": 0.85491,
+   "unit": "-",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapter 1: stream 2 results: methanol 8.262 and water 2.494 lbmol/h, as mass fraction",
+   "precision": "printed, converted",
+   "pass_rel": 0.03
+  },
+  {
+   "name": "flash_P",
+   "kind": "stream_P_kPa",
+   "target": "FLASHED",
+   "value": 101.325,
+   "unit": "kPa",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapter 1: block B1 outlet pressure 14.6959488 psi = 1 atm",
+   "precision": "printed",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "outlet_mass_sum",
+   "kind": "streams_mass_sum_kg_h",
+   "targets": [
+    "VAPOR",
+    "LIQUID"
+   ],
+   "value": 1135.274,
+   "unit": "kg/h",
+   "anchor": "Aspen Plus 2006.5 Getting Started, chapter 1: mass balance of the 50/50 feed",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.03,
+  "note": "tolerances fixed before the run: temperature 1 percent (of the value in C), vapour fraction and flow 5 percent, vapour composition 3 percent. The property method of the Aspen run is unknown, so no package is expected to match and a miss is not a failure of the case; the spread across packages is the result"
+ },
+ "scenarios": [],
+ "review": {
+  "method": "values transcribed from the printed results; molar masses checked by reproducing the printed vapour mass flow",
+  "human": false
+ },
+ "status": "built"
+}

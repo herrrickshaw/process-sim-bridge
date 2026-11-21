@@ -246,6 +246,20 @@ TOOLS = {
     "export_dexpi": (t_export_dexpi, "Write the P&ID as DEXPI-style Proteus XML.", _s({"name": _n, "path": _p, "overwrite": _b}, ["name", "path"])),
     "export_dexpi_process": (t_export_dexpi_process, "Write the DEXPI Process model JSON (needs pydexpi).", _s({"name": _n, "path": _p, "overwrite": _b}, ["name", "path"])),
 }
+from .dwsim.tools import TOOLS as _DWSIM_TOOLS        # dwsim_* tools drive DWSIM from the same sessions
+TOOLS.update(_DWSIM_TOOLS)
+from .aspen.tools import TOOLS as _ASPEN_TOOLS        # aspen_* tools (mock tree by default; live COM untested)
+TOOLS.update(_ASPEN_TOOLS)
+from .safety_link import TOOLS as _SAFETY_TOOLS      # safety_* tools: solved streams -> process-safety-design-toolkit
+TOOLS.update(_SAFETY_TOOLS)
+from .refinery_link import TOOLS as _REFINERY_TOOLS   # refinery_* tools: whole-refinery screening balance
+TOOLS.update(_REFINERY_TOOLS)
+from .steam_link import TOOLS as _STEAM_TOOLS         # steam_* tools: heat duty -> steam demand vs the NETL B11A cycle
+TOOLS.update(_STEAM_TOOLS)
+from .utilities_link import TOOLS as _UTIL_TOOLS      # utility_* tools: air, nitrogen, cooling water, demin water, plant balance
+TOOLS.update(_UTIL_TOOLS)
+from .polymer_link import TOOLS as _POLYMER_TOOLS     # polymer_* tools: method-of-moments stream attributes and mixing (Aspen Polymers arithmetic)
+TOOLS.update(_POLYMER_TOOLS)
 
 
 # ---- JSON-RPC / MCP stdio loop ----------------------------------------------------------------------------
@@ -294,3 +308,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+from .casebook.tools import TOOLS as _CASEBOOK_TOOLS  # casebook_* tools: published reference cases run on DWSIM and compared
+TOOLS.update(_CASEBOOK_TOOLS)
+from .datasheet_check import TOOLS as _DATASHEET_TOOLS  # datasheet_check: attribute mismatches across P&ID, H&MB and vendor data sheets
+TOOLS.update(_DATASHEET_TOOLS)
+from .lng_link import TOOLS as _LNG_TOOLS  # lng_cost_*: LNG value-chain cost estimate (lng-cost repo), capacity from a solved stream
+TOOLS.update(_LNG_TOOLS)
+from .ppac_link import TOOLS as _PPAC_TOOLS  # ppac_*: PPAC Ready Reckoner tables as reference data (ppac-ready-reckoner-data repo)
+TOOLS.update(_PPAC_TOOLS)

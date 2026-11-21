@@ -1,0 +1,62 @@
+# University guides on simulation modelling exercises: collector and first index (2026-11-20)
+
+## What was asked and what was built
+Asked: run a collector on all university websites publishing guides on modelling exercises in simulation. "All" is not something a polite collector can do: there is no list of such sites, and the repo's own rule (CLAUDE.md, "Source fetching") is about one request per second per host and no bulk crawling. What was built instead is a bounded collector that indexes the pages you give it, plus a first seed list found by web search. It is the first stage of the paper-to-simulation pipeline (discover), pointed at teaching material.
+
+## The collector (`hysys_bridge/casebook/collect.py`, tests `hysys_bridge/tests/test_collect.py`)
+- **Index, not copy.** For each URL it records the title, content type, size, a short hash, page count (PDF), a licence hint, and counts of simulator names, unit-operation terms and exercise cues. Page text is counted in memory and discarded; none is written to disk. Course notes are copyrighted by their authors, so the index holds facts about the pages, not their content. A licence hint of "none-seen" means no notice was found in the part read, not that reuse is allowed.
+- **Politeness.** At most one request per second per host (a longer `Crawl-delay` in robots.txt wins); robots.txt is read before every fetch, and a URL is fetched only if it is allowed for the collector's own agent name and for `Claude-User`; a robots file that is unreachable or answers 401/403 is treated as closed, not guessed; a 401, 403, 429 or 503, a captcha, a "request rejected" page or a login wall ends work on that host and is recorded, never bypassed; a blocked URL is not retried; one page per seed (no link following); 25 MB cap; seeds already indexed are not fetched again.
+- **Seeds** are in `studies/sources/seeds.txt` (operator-controlled). Run: `python3 -m hysys_bridge.casebook.collect studies/sources/seeds.txt`. Output: `studies/sources/guides.jsonl`, one row per URL.
+- **Tests:** 15 tests against a local server (robots disallow, a rule written for Claude-User, crawl delay, 403 and a 200 "request rejected" page as blocks, oversize files, one-second spacing, no text stored, no re-fetch, caps, whole-word counting); 13 hand-made mutants all caught. The first real run found a bug the tests had missed: a 244-byte WAF page ("Request Rejected") served with HTTP 200 was indexed as a guide. The pattern and a test were added and that row re-run.
+
+## First index (21 URLs, one request each)
+Seeds came from four web searches (titles and snippets only, nothing read before the run); Scribd, SlideShare, Academia and Udemy results were left out because their copyright status is unreliable.
+
+| Outcome | Count | Hosts |
+|---|---|---|
+| Indexed | 14 | Washington, UC Davis, UCSB, Bucknell, King Faisal, Politecnico di Milano, Marwadi, Genoa, Saint-Joseph (Lebanon), Liege, NPTEL, BIT Mesra, FOSSEE (IIT Bombay), a Chem. Eng. Education article (Florida journals) |
+| Blocked, left alone | 3 | the two University of Michigan Aspen workshop pages (HTTP 403 for this agent), and a Jordan university host that answered with a "Request Rejected" page |
+| Skipped by robots | 3 | robots.txt unreachable (Nazarbayev, Seoul National, Chulalongkorn): not guessed |
+| Error | 1 | University of Alberta (404, page moved) |
+
+Most useful candidates by what the counts show (counts are mentions, not an assessment of the exercises; none of these were read):
+
+| Source | Pages | Simulator | Unit and exercise terms that stand out |
+|---|---|---|---|
+| FOSSEE / SASTRA DWSIM lab manual | 58 | DWSIM (68 mentions) | heat exchanger 20, reactor 16, flash 14, heater 14, CSTR 12; 20 exercise cues; the best match for our DWSIM backend |
+| University of Washington Aspen Plus tutorial | 72 | Aspen Plus | distillation 51, RadFrac 32, mixer 24, flash 22, convergence 19; 205 exercise cues (the search snippet says units end with homework and solutions) |
+| King Faisal University lab manual | 162 | Aspen Plus, Excel | distillation 25, RadFrac 22, reactor 22, recycle 12, sensitivity 11 |
+| UCSB HYSYS manual | 91 | HYSYS (87) | reactor 62, mixer 24, CSTR 16 |
+| Liege "Introduction aux travaux numeriques" (French) | 45 | Aspen Plus, HYSYS | convergence 44, flash 31, distillation 16, design spec 9 |
+| BIT Mesra CAPE/Aspen tutorials | 62 | Aspen Plus | reactor 22, RadFrac 11, compressor 9, recycle 9 |
+| UC Davis Aspen modules paper | web page | Aspen Plus | recycle, sensitivity, design spec, convergence |
+
+## What this feeds
+These are leads for new reference cases of the kind already built (read the exercise, take its specification and stated answer, add an independent oracle where one exists). The DWSIM manual and the Washington tutorial cover units still not verified here (heat exchanger, CSTR, shortcut and rigorous columns, design specs). Before any case, the document has to be read in full and its licence checked: only facts (specifications, answers) go into a case file, never text, tables or figures.
+
+## Extending it
+- Add URLs to `seeds.txt`. More discovery needs searches per course or department, and a decision on following links one level deep, which is not implemented and would need a per-host cap and your go-ahead.
+- Hosts that blocked or skipped are not retried automatically. A person can ask the host's owners, use a copy the author published elsewhere, or drop it.
+- Index rows are facts about public pages; they are not an endorsement of the content.
+
+## Second index: IIT Madras, other IITs and Indian institutes (2026-11-21)
+
+Asked: find more open sources from IIT Madras and other institutes. Method: five web searches (titles and snippets), 23 seed pages added to `studies/sources/seeds.txt`, one polite request each with the same collector (robots.txt checked, 1 request/s per host, index only), then ten of the small syllabus and lecture PDFs fetched once with `fetch_source.py` and read for their outline. The first index rows are unchanged (the index is now 44 URLs). Licence: none seen on any of these pages (NPTEL material is typically freely viewable, but no licence text was found, so only facts and structure are noted here, no copied text).
+
+**One correction to the search summaries.** Search snippets called NPTEL course 103106071 "Safety Practices in Chemical and Nuclear Industries"; the syllabus PDF says **"Chemical Plant Safety and Risk Assessment"**, coordinated by Dr. Raghuram Chetty and Prof. T. Swaminathan, Department of Chemical Engineering, IIT Madras. Two lecture PDFs in that course share the title "Fire and Explosion" (44 and 118 pages), so the search snippet's "Chemical Process Safety, Lecture 6" label does not match the file title. I rely on the files.
+
+| Institute | Source | What it is (read from the syllabus or file) | Relevance here |
+|---|---|---|---|
+| IIT Madras | [Chemical Plant Safety and Risk Assessment, NPTEL 103106071](https://archive.nptel.ac.in/content/syllabus_pdf/103106071.pdf) | 40+ hours: accidents (Flixborough, Seveso, Bhopal), hazard types, fire and explosion, runaway reactions, risk assessment (HAZOP, HAZON, fault tree, consequence analysis), emergency management; references include Crowl and Louvar and Lees | HAZOP and consequence analysis background for the guardrail work; lecture files [1](https://archive.nptel.ac.in/content/storage2/courses/103106071/lec1.pdf) and [6](https://archive.nptel.ac.in/content/storage2/courses/103106071/lec6.pdf) are indexed (reactor and relief-device material in lecture 6), not read in full |
+| IIT Madras | [HSE Management in Petroleum and Offshore Engineering, NPTEL 114106017](https://archive.nptel.ac.in/content/syllabus_pdf/114106017.pdf) and the [video course 114106042](https://archive.nptel.ac.in/content/syllabus_pdf/114106042.pdf) (Dr. Srinivasan Chandrasekaran, Ocean Engineering) | hazard identification, HAZOP and HAZID with case studies, offshore accidents; the institute's own course sheet [PE6090](https://doe.iitm.ac.in/img/courses/CourseDetails_pe6090.pdf) lists HAZOP and case studies | HAZOP source with case studies; the lecture files were not opened |
+| IIT Madras (hosted at nptel.iitm.ac.in; coordinator not named in the text I read) | [Plantwide Control of Chemical Processes, NPTEL 103104049](https://archive.nptel.ac.in/content/syllabus_pdf/103104049.pdf) | steady state to dynamic simulation with Aspen Plus and HYSYS: equipment sizing, plumbing, regulatory control, tuning, recycle case studies | the dynamic and recycle side we have not touched (distillation 11 mentions, HYSYS 9) |
+| NPTEL (institute not named in the text) | [Process Modelling and Simulation, 103107096](https://archive.nptel.ac.in/content/syllabus_pdf/103107096.pdf) | modelling, parameter estimation, tools of simulation, unit models, heat-transfer equipment models | theory background, no software exercises |
+| IIT Kharagpur | [Principles and Practices of Process Equipment and Plant Design, 103105210](https://archive.nptel.ac.in/content/syllabus_pdf/103105210.pdf) (Prof. Gargi Das, Prof. S. Ray; book: Elsevier 2020) | 12-week plan: distillation, absorption, extraction, double-pipe and shell-and-tube exchangers with **a design problem after each topic**, heat exchanger networks, **plant hydraulics (pumps, compressors, pipelines), pressure vessels with design problems, process utilities, safety** | the closest match to the vessel, pump and valve guardrails and to more exchanger exercises; only the outline was read, the lectures were not |
+| IIT Roorkee | [Equipment Design: Mechanical Aspects, 103107143](https://archive.nptel.ac.in/content/syllabus_pdf/103107143.pdf) (Prof. Shabina Khanam) | shell and head stresses, openings, flanges, supports, external pressure | mechanical design of vessels; outline only |
+| NPTEL Chemical Engineering Design II (institute not stated in the file) | [Module 9, process hazards and safety measures in equipment design, 103103027](https://archive.nptel.ac.in/content/storage2/courses/103103027/pdf/mod9.pdf) (13 pages, read in full) | hazard analysis, flammability, safety measures for pressure vessels, heat transfer equipment, electrical and rotary equipment, pressure relief devices | states, citing a textbook, that vessels follow Indian standards codes and are tested at 1.3 times the design pressure, and that all pressure vessels carry relief devices; it gives no design-pressure margin and no valve or pump rules, so it adds no new numeric guardrail (a hydrotest pressure is not something a flowsheet returns) |
+| IIT Bombay (FOSSEE) | [DWSIM Textbook Companion, completed books](https://dwsim.fossee.in/textbook-companion/completed-books) and [project page](https://dwsim.fossee.in/node/6) | textbook examples coded in DWSIM, checked against each book's own results; a book needs at least 30 codable examples; a download of the codes per book | a source of worked textbook examples with the textbook's results as the reference, the closest thing to a published answer key found so far; the code downloads are not fetched (that is a file download, and licence is "Creative Commons mentioned" on the page, to be checked per book) |
+| RGIPT (Institution of National Importance) | [Certified HAZOP Leader Training, Sept 2025](https://rgipt.ac.in/MDP/edpsrc/pdf/HAZOP-2025.pdf) | a four-day brochure with a partner firm | programme description, no technical content |
+
+**Not found.** No IIT Madras material on DWSIM or on pump and valve selection; no NIT, IISc or other IIT open lab manuals for DWSIM or Aspen (the search returned only the FOSSEE and SASTRA manual already used, and an NIT Rourkela syllabus page that now answers 404). The NPTEL course landing pages for 103105210, 114106017, 114106042 and the Aspen Plus Basics course answered 404 at the URLs I guessed, and the `onlinecourses.nptel.ac.in` preview pages are script-rendered and indexed as empty, so only the syllabus and lecture PDFs carried content.
+
+**Suggested next reads, in order of value for this repo:** (1) the IIT Kharagpur lectures on plant hydraulics and pressure vessels (to check whether they give pump, valve or vessel margins that can be cited directly, which would replace forum summaries); (2) the IIT Madras Chemical Plant Safety lectures on HAZOP and consequence analysis; (3) the FOSSEE textbook-companion book list for a textbook whose examples are heat exchangers, reactors or recycle loops with printed answers. Each needs the lecture or book page located first, since the guessed course URLs 404.

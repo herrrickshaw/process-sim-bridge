@@ -1,0 +1,294 @@
+{
+ "id": "ammonia-conversion-reactor-fossee-exp5",
+ "source": {
+  "title": "SASTRA FOSSEE 'Process Simulation Using DWSIM' (Naren, v02, Dec 2017), Experiment 5",
+  "doi": null,
+  "url": "https://primary.fossee.in/dwsim/manuals/SASTRA-FOSSEE-DWSIM-v02-30Dec17.pdf",
+  "licence": "none seen on the document (index row licence_hint none-seen); facts only",
+  "use": "facts-only (specification and structure); no text or figures copied",
+  "read": "full-text",
+  "fetch_route": "fetch_source.py, one GET after robots.txt allowed; text layer read in full (58 pages)",
+  "note": "the results table is an image; the references are exact mole balances and a standard heat of formation, not transcribed values"
+ },
+ "basis": {
+  "compounds": [
+   "Nitrogen",
+   "Hydrogen",
+   "Ammonia"
+  ],
+  "package_in_paper": "Raoult's Law",
+  "packages": [
+   "Raoult's Law",
+   "Peng-Robinson",
+   "SRK"
+  ],
+  "composition_basis": "mole",
+  "molar_mass_g_mol": {
+   "Nitrogen": 28.01348,
+   "Hydrogen": 2.01588,
+   "Ammonia": 17.03052
+  },
+  "molar_mass_source": "CoolProp 7",
+  "enthalpy_reference": "standard heat of formation used for the duty only"
+ },
+ "streams": [
+  {
+   "id": "FEED",
+   "role": "feed",
+   "src": null,
+   "dst": "R",
+   "T": {
+    "value": 25.0,
+    "unit": "C",
+    "anchor": "FOSSEE DWSIM manual Exp 5: 25 C"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "FOSSEE DWSIM manual Exp 5: 1 atm"
+   },
+   "mass_flow": {
+    "value": 851.528,
+    "unit": "kg/h",
+    "anchor": "FOSSEE DWSIM manual Exp 5: 100 kmol/h converted with the stated molar masses"
+   },
+   "composition": {
+    "values": {
+     "Nitrogen": 0.25,
+     "Hydrogen": 0.75,
+     "Ammonia": 0.0
+    },
+    "provenance": {
+     "Nitrogen": "reported",
+     "Hydrogen": "reported",
+     "Ammonia": "reported"
+    }
+   }
+  },
+  {
+   "id": "VAP",
+   "role": "product",
+   "src": "R",
+   "dst": null,
+   "phase": "vapor"
+  },
+  {
+   "id": "LIQ",
+   "role": "product",
+   "src": "R",
+   "dst": null,
+   "phase": "liquid"
+  }
+ ],
+ "units": [
+  {
+   "id": "R",
+   "type": "conversion_reactor",
+   "params": {
+    "thermal_mode": "isothermal",
+    "reaction": {
+     "name": "ammonia-formation",
+     "stoichiometry": {
+      "Nitrogen": -1,
+      "Hydrogen": -3,
+      "Ammonia": 2
+     },
+     "base_compound": "Nitrogen",
+     "conversion_pct": 20.0,
+     "phase": "Vapor",
+     "anchor": "FOSSEE DWSIM manual Exp 5: N2(g) + 3 H2(g) -> 2 NH3(g), conversion of nitrogen 20 %, vapour phase"
+    }
+   }
+  }
+ ],
+ "reported": [
+  {
+   "name": "outlet_mass",
+   "kind": "stream_mass_kg_h",
+   "target": "VAP",
+   "value": 851.528,
+   "unit": "kg/h",
+   "anchor": "FOSSEE DWSIM manual Exp 5: vapour outlet mass equals the feed mass (mass is conserved by the reaction); liquid outlet is empty",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "vapor_nitrogen_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "VAP",
+   "value": 0.657958,
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 5: exit composition: independent: exact mole balance on N2 + 3 H2 -> 2 NH3 at the stated conversion, molar masses from CoolProp 7 (20.000 of 90.000 kmol/h)",
+   "precision": "independent calculation",
+   "compound": "Nitrogen",
+   "pass_rel": 0.001
+  },
+  {
+   "name": "vapor_hydrogen_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "VAP",
+   "value": 0.142042,
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 5: exit composition: independent: exact mole balance on N2 + 3 H2 -> 2 NH3 at the stated conversion, molar masses from CoolProp 7 (60.000 of 90.000 kmol/h)",
+   "precision": "independent calculation",
+   "compound": "Hydrogen",
+   "pass_rel": 0.001
+  },
+  {
+   "name": "vapor_ammonia_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "VAP",
+   "value": 0.2,
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 5: exit composition: independent: exact mole balance on N2 + 3 H2 -> 2 NH3 at the stated conversion, molar masses from CoolProp 7 (10.000 of 90.000 kmol/h)",
+   "precision": "independent calculation",
+   "compound": "Ammonia",
+   "pass_rel": 0.001
+  },
+  {
+   "name": "outlet_T",
+   "kind": "stream_T_C",
+   "target": "VAP",
+   "value": 25.0,
+   "unit": "C",
+   "anchor": "FOSSEE DWSIM manual Exp 5: reactor operated isothermally at 25 C",
+   "precision": "specified",
+   "pass_rel": 0.001
+  },
+  {
+   "name": "outlet_mass_sum",
+   "kind": "streams_mass_sum_kg_h",
+   "value": 851.528,
+   "unit": "kg/h",
+   "anchor": "FOSSEE DWSIM manual Exp 5: vapour plus liquid outlets equal the feed (exact)",
+   "precision": "exact",
+   "targets": [
+    "VAP",
+    "LIQ"
+   ],
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "reactor_duty",
+   "kind": "unit_duty",
+   "target": "R",
+   "value": -459000.0,
+   "unit": "kJ/h",
+   "anchor": "FOSSEE DWSIM manual Exp 5: self-learning question 1, heat duty of the reaction: isothermal at 298.15 K, duty = extent x heat of reaction; independent: dHf(NH3, g) = -45.9 kJ/mol (standard value, three digits), so -91800 kJ/kmol N2 x 5.00 kmol/h",
+   "precision": "independent calculation",
+   "pass_rel": 0.02
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.001,
+  "note": "mole balance is exact, so 0.1 percent; the duty tolerance (2 percent) is wider because the heat of formation is a three-digit standard value"
+ },
+ "scenarios": [
+  {
+   "id": "conversion-50",
+   "why": "the same reactor at 50 % conversion: the mole balance gives 75.00 kmol/h out and a duty proportional to the extent (independent calculation)",
+   "overrides": [
+    {
+     "unit": "R",
+     "path": [
+      "params",
+      "reaction",
+      "conversion_pct"
+     ],
+     "set": 50.0
+    },
+    {
+     "reported": "outlet_mass",
+     "path": [
+      "value"
+     ],
+     "set": 851.527
+    },
+    {
+     "reported": "vapor_nitrogen_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.411224
+    },
+    {
+     "reported": "vapor_hydrogen_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.088776
+    },
+    {
+     "reported": "vapor_ammonia_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.499999
+    },
+    {
+     "reported": "reactor_duty",
+     "path": [
+      "value"
+     ],
+     "set": -1147500.0
+    }
+   ]
+  },
+  {
+   "id": "conversion-10",
+   "why": "the same reactor at 10 % conversion: the mole balance gives 95.00 kmol/h out and a duty proportional to the extent (independent calculation)",
+   "overrides": [
+    {
+     "unit": "R",
+     "path": [
+      "params",
+      "reaction",
+      "conversion_pct"
+     ],
+     "set": 10.0
+    },
+    {
+     "reported": "outlet_mass",
+     "path": [
+      "value"
+     ],
+     "set": 851.528
+    },
+    {
+     "reported": "vapor_nitrogen_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.740203
+    },
+    {
+     "reported": "vapor_hydrogen_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.159797
+    },
+    {
+     "reported": "vapor_ammonia_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.1
+    },
+    {
+     "reported": "reactor_duty",
+     "path": [
+      "value"
+     ],
+     "set": -229500.0
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "exact mole balance with CoolProp molar masses; duty from the standard heat of formation of ammonia",
+  "human": false
+ },
+ "status": "built"
+}
