@@ -1,5 +1,5 @@
 """Polymer stream attributes by the method of moments, as used by Aspen Polymers (Liu and Sharma, "Introduction to Integrated Process Modeling,
-Advanced Control, and Data Analytics in Optimizing Polyolefin Manufacturing", Chapter 1, 2023, sections 1.1.2 and 1.1.3, equations 1.1 to 1.13).
+Advanced Control, and Data Analytics in Optimizing Polyolefin Manufacturing", Chapter 1, engrXiv doi 10.31224/4406, licence CC BY 4.0, sections 1.1.2 and 1.1.3, equations 1.1 to 1.13).
 A pure calculator, no simulator and no dependencies: it checks the stream-initialisation and mixing arithmetic that Aspen Polymers does, so an Aspen result
 (or a printed table) can be tested against the definitions.
 

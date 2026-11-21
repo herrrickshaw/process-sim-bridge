@@ -847,6 +847,49 @@ class AspenGettingStarted(unittest.TestCase):
         c = schema.load(ASPEN["mch"]); c["basis"]["molar_mass_g_mol"].pop("Phenol"); self.assertTrue(any("mole-fraction reference needs" in x for x in schema.validate(c)))
 
 
+HDPE = os.path.join(os.path.dirname(CASE), "hdpe-slurry-open-loop-liu-sharma.json")
+
+
+class HdpeSlurry(unittest.TestCase):
+    """Printed open-loop results of the slurry HDPE workshop (Liu and Sharma 2025, doi 10.31224/4406, CC BY 4.0): internal consistency of the transcribed numbers."""
+    MWSEG = 28.0538                     # ethylene repeat segment, g/mol
+
+    def test_validates_blocked_and_cc_by_identity(self):
+        c = schema.load(HDPE); self.assertEqual(schema.validate(c), []); self.assertEqual(c["status"], "blocked"); self.assertEqual(c["source"]["doi"], "10.31224/4406"); self.assertIn("Creative Commons Attribution 4.0", c["source"]["licence"])
+        self.assertFalse(schema.capability(c)["buildable"]); self.assertFalse(runner.run_case(c)["ran"])
+
+    def test_printed_streams_close(self):
+        c = schema.load(HDPE); s = {x["id"]: x for x in c["streams"]}
+        feed = sum(s[i]["mass_flow"]["value"] for i in ("C2", "CAT", "H2", "HX")); self.assertAlmostEqual(feed, 20963.31, places=2)
+        poly = {"C2H4": 11.9272, "HDPE": 5684.82, "TiCl4": 1.22, "TEAL": 0.927715, "H2": 1.99774, "HX": 15174.3}
+        self.assertAlmostEqual(sum(poly.values()) / 20875.2, 1.0, delta=1e-6)                                    # the printed components add to the printed stream flow
+        cat = s["CAT"]["composition"]["values"]; self.assertAlmostEqual(cat["TiCl4"] + cat["TEAL"] + cat["HX"], 1.0, places=6); self.assertAlmostEqual(cat["TiCl4"] * 255.31, 1.22, places=3)
+        deficits = {"C2H4": 5700 - poly["C2H4"] - poly["HDPE"], "H2": 8 - poly["H2"], "HX": 15000 + 252.93 - poly["HX"], "TEAL": 1.16 - poly["TEAL"]}
+        self.assertAlmostEqual(sum(deficits.values()), feed - 20875.2, delta=2e-4 * (feed - 20875.2))       # the unprinted vapour stream (88.11 kg/h) equals what is missing from the polymer stream, to 0.02 percent
+
+    def test_reported_values_match_the_printed_stream(self):
+        c = schema.load(HDPE); r = {x["name"]: x for x in c["reported"]}
+        self.assertEqual((r["polymer_T"]["value"], r["polymer_P"]["value"], r["polymer_mass"]["value"]), (85.0, 755.0, 20875.2))
+        for comp, kg in (("C2H4", 11.9272), ("HDPE", 5684.82), ("H2", 1.99774), ("HX", 15174.3), ("TEAL", 0.927715)): self.assertAlmostEqual(r[f"polymer_{comp}_mass_fraction"]["value"], kg / 20875.2, places=7, msg=comp)
+
+    def test_printed_moment_relations(self):
+        dpn, dpw, fmom, hdpe = 99598.2, 254569.0, 202.632, 5684.82
+        self.assertAlmostEqual(hdpe / fmom / self.MWSEG, 1.0, delta=1e-4)                                       # FMOM is total segments: mass / segment molar mass
+        self.assertAlmostEqual(dpn * self.MWSEG / 2.794e6, 1.0, delta=2e-4)                                      # the text's MWN
+        zmom = fmom / dpn; self.assertAlmostEqual(hdpe / zmom / 2.794e6, 1.0, delta=2e-4)
+
+    def test_the_texts_first_run_mww_disagrees_with_the_printed_dpw(self):
+        dpn, dpw = 99598.2, 254569.0; pdi = dpw / dpn
+        self.assertAlmostEqual(6.94027e6 / 2.71533e6, pdi, delta=1e-3 * pdi)                                        # the second run's printed MWN and MWW give the table's PDI
+        implied = dpw * self.MWSEG; self.assertAlmostEqual(implied / 7.194163e6 - 1, -0.0073, delta=0.0005)       # printed text value is 0.73 percent above DPW x MWSEG
+        self.assertAlmostEqual(implied / 7.141163e6 - 1, 0.0, delta=1e-4)                                         # a transposed digit (7.141 for 7.194) would agree
+        self.assertAlmostEqual(7.194163 / 2.794, 2.5749, places=3); self.assertAlmostEqual(pdi, 2.5560, places=3)
+
+    def test_the_texts_second_run_conversion_is_a_slip(self):
+        self.assertAlmostEqual(5684.82 / 5700 * 100, 99.73, places=2)                                              # first run as printed
+        self.assertAlmostEqual(5525.38 / 5700 * 100, 96.94, places=2); self.assertNotAlmostEqual(5525.38 / 5700 * 100, 97.94, places=1)     # printed as 97.94
+
+
 class Ledger(unittest.TestCase):
     def test_append_and_read_are_additive(self):
         with tempfile.TemporaryDirectory() as d:
