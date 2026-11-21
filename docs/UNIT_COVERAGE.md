@@ -20,10 +20,10 @@ Status key: **verified** = built through our casebook or tool path and run on th
 | Flash, three phase | Flash3, Decanter (official) | 3-Phase Separator | Vessel (phase settings unknown) | none | not driven | none |
 | Heater, cooler | Heater (official) | Heater, Cooler | Heater, Cooler | heater, cooler | **verified** with an independent CoolProp oracle through a phase change: Steam Tables within 0.07%, cubic EOS 4 to 15% off for water (cumene heater and recycle loop earlier) | done |
 | Heat exchanger | HeatX (official), MHeatX | Heat Exchanger | HeatExchanger | exchanger | **verified** for UA and hot-outlet modes, counter- and co-current, water and toluene (24 live runs, independent CoolProp references); other modes not mapped | done (architecture doc section 20) |
-| Pump | Pump (secondary) | Pump | Pump | pump | verified parameter mapping; no published duty case yet | cumene pumps (needs table matching) |
-| Compressor | Compr, MCompr (secondary) | Compressor | Compressor | compressor | parameter mapping verified; no published case | oil and gas plant (blocked, see architecture doc section 13), CCGT |
+| Pump | Pump (secondary) | Pump | Pump | pump | **verified** by value (constructed water pump, 9 live runs within 0.3 % of a CoolProp reference; server default efficiency 75 %); no published duty case yet | cumene pumps (needs table matching) |
+| Compressor | Compr, MCompr (secondary) | Compressor | Compressor | compressor | **verified** by value (constructed methane compressor, 6 live runs within 0.2 %); no published case | oil and gas plant (blocked, see architecture doc section 13), CCGT |
 | Expander, turbine | Compr in expander mode (secondary) | Expander | Expander | none | server has it | CCGT cases |
-| Valve | Valve (secondary) | Valve | Valve | valve | parameter mapping verified (isenthalpic check); no published case | oil and gas plant |
+| Valve | Valve (secondary) | Valve | Valve | valve | **verified** by value (constructed methane throttling, 6 live runs): SRK within 3.4 % of the real-gas reference, Peng-Robinson 12 % off, Raoult's Law gives no cooling; no published case | oil and gas plant |
 | Pipe | Pipe, Pipeline (secondary) | Pipe Segment | Pipe | none | server has it | none |
 | Recycle (tear stream) | convergence options, tear streams (official) | Recycle | Recycle | recycle | **verified** (tutorial loop, 8 runs within 0.04%) | done |
 | Design spec, adjust | Design Spec, Calculator, Sensitivity (official) | Adjust, Set, Spec | Adjust, Spec | none | server has the types; no use of them | DWSIM tutorials with an adjust (not read) |

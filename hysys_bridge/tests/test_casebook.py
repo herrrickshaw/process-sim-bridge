@@ -759,6 +759,36 @@ class Guardrails(unittest.TestCase):
         rows = runner.ledger_rows(run); self.assertTrue(any(":violation:" in g for g in rows[0]["guardrails"]))
 
 
+HYD = {k: os.path.join(os.path.dirname(CASE), v + ".json") for k, v in (("pump", "water-pump-constructed"), ("comp", "methane-compressor-constructed"), ("valve", "methane-valve-isenthalpic-constructed"))}
+
+
+class PumpCompressorValve(unittest.TestCase):
+    def c(self, k): return schema.load(HYD[k])
+    def test_validate_and_scenarios_apply(self):
+        for k in HYD:
+            c = self.c(k); self.assertEqual(schema.validate(c), [], k); self.assertEqual(c["source"]["read"], "computed"); self.assertFalse(c["review"]["human"])
+            for sc in c["scenarios"]: self.assertEqual(schema.validate(schema.apply_scenario(c, sc["id"])), [], sc["id"])
+
+    def test_outlet_rule_pressure_for_pump_valve_compressor_temperature_for_heater(self):
+        for k in HYD:
+            c = self.c(k); self.assertNotIn("T", c["streams"][1])                                        # the outlet temperature is a result, not a specification
+            del c["streams"][1]["P"]; self.assertTrue(any(".P" in x for x in schema.validate(c)), k)       # but the outlet pressure is required
+        h = schema.load(HEATCOOL); self.assertEqual(schema.validate(h), []); del next(s for s in h["streams"] if s["id"] == "HOT")["T"]
+        self.assertTrue(any("streams[HOT].T" in x for x in schema.validate(h)))                                    # a heater outlet still needs its temperature
+
+    def test_pump_reference_matches_the_hydraulic_power_formula(self):
+        """Duty = flow x pressure rise / (density x efficiency): 36000 kg/h of water (997.05 kg/m3) through 398.675 kPa at 0.75."""
+        c = self.c("pump"); r = {x["name"]: x["value"] for x in c["reported"]}
+        self.assertAlmostEqual(r["pump_duty"], 36000 / 997.05 * 398.675 / 0.75, delta=0.002 * r["pump_duty"])
+        s = schema.apply_scenario(c, "flow-double"); self.assertAlmostEqual({x["name"]: x["value"] for x in s["reported"]}["pump_duty"], 2 * r["pump_duty"], delta=0.001 * r["pump_duty"])
+
+    def test_compressor_and_valve_references_have_the_right_signs(self):
+        c = self.c("comp"); b = {x["name"]: x["value"] for x in c["reported"]}; d = {x["name"]: x["value"] for x in schema.apply_scenario(c, "discharge-10-bar")["reported"]}
+        self.assertGreater(b["outlet_T"], 25.0); self.assertGreater(d["compressor_duty"], b["compressor_duty"]); self.assertGreater(d["outlet_T"], b["outlet_T"])
+        v = self.c("valve"); vb = {x["name"]: x["value"] for x in v["reported"]}; vs = {x["name"]: x["value"] for x in schema.apply_scenario(v, "to-30-bar")["reported"]}
+        self.assertLess(vb["outlet_T"], 25.0); self.assertLess(vb["outlet_T"], vs["outlet_T"]); self.assertLess(vs["outlet_T"], 25.0)       # throttling a real gas cools it, less for a smaller drop
+
+
 class Ledger(unittest.TestCase):
     def test_append_and_read_are_additive(self):
         with tempfile.TemporaryDirectory() as d:

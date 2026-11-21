@@ -128,10 +128,12 @@ def validate(case: dict) -> list[str]:
         if role == "product" and s.get("dst") is not None: p.append(f"{pa}: a product has no dst")
         for e in ("src", "dst"):
             if s.get(e) is not None and s[e] not in units: p.append(f"{pa}.{e} {s[e]!r} is not a unit")
-        needs_tp = role == "feed" or units.get(s.get("src"), {}).get("type") in SPEC_BY_OUTLET     # other streams are computed: T and P optional, checked when given
-        pr = s.get("P")
-        if needs_tp or "T" in s: _qty(pa + ".T", s.get("T"), {"C"}, p)
-        if needs_tp or "P" in s: _qty(pa + ".P", pr, {"bar", "kPa"}, p)
+        src_type = units.get(s.get("src"), {}).get("type")
+        needs_t = role == "feed" or src_type in ("heater", "cooler")                  # a heater or cooler outlet carries the temperature specification
+        needs_p = role == "feed" or src_type in SPEC_BY_OUTLET                        # a pump, valve or compressor outlet carries the pressure specification; its temperature is a result (a reported value)
+        pr = s.get("P")                                                               # other streams are computed: T and P optional, checked when given
+        if needs_t or "T" in s: _qty(pa + ".T", s.get("T"), {"C"}, p)
+        if needs_p or "P" in s: _qty(pa + ".P", pr, {"bar", "kPa"}, p)
         if isinstance(pr, dict) and pr.get("basis") not in ("absolute", "gauge"): p.append(f"{pa}.P.basis must be absolute or gauge (it has caused mismatches before)")
         if role == "feed":
             _qty(pa + ".mass_flow", s.get("mass_flow"), {"kg/h"}, p)
