@@ -10,7 +10,7 @@ Quantitative guide words (NONE, MORE, LESS, REVERSE) follow the simulation-based
 must be sized, not only named."""
 from __future__ import annotations
 import copy, re
-from . import guardrails, runner, schema
+from . import guardrails, hazop_rules, runner, schema
 
 NONE_FLOW_FRACTION = 1e-4
 ALLOWED = {"flow": {"NONE", "MORE", "LESS", "REVERSE"}, "temperature": {"MORE", "LESS"}, "pressure": {"MORE", "LESS"}, "composition": {"AS_WELL_AS", "PART_OF"}}
@@ -50,6 +50,8 @@ def validate_spec(spec: dict, case: dict) -> list[str]:
         nodes.add(nid)
         if n.get("stream") not in feeds: p.append(f"node {nid}: stream {n.get('stream')!r} is not a feed stream (deviations are applied to feeds: {sorted(feeds)})")
         if not n.get("deviations"): p.append(f"node {nid}: no deviations")
+        ue = n.get("upstream_equipment")
+        if ue is not None and not (isinstance(ue, list) and set(ue) <= hazop_rules.EQUIPMENT): p.append(f"node {nid}: upstream_equipment must be a list drawn from {sorted(hazop_rules.EQUIPMENT)}")
         for d in n.get("deviations", []):
             pa = f"node {nid} deviation {d.get('id', '?')}"
             if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", str(d.get("id", ""))) or d["id"] in seen: p.append(f"{pa}: id missing, malformed or duplicated")
@@ -121,13 +123,17 @@ def _consequences(base_rows, dev_rows, dev_res) -> list[dict]:
     return out
 
 
-def run_study(spec: dict, case: dict, transport_factory=None, solve=None) -> dict:
+def run_study(spec: dict, case: dict, transport_factory=None, solve=None, rules=None) -> dict:
     """Run every deviation of a validated spec in every package; returns the worksheet. `solve` is injectable for tests (default: runner.solve_case)."""
     probs = validate_spec(spec, case)
     if probs: raise ValueError("spec is not valid: " + "; ".join(probs))
     solve = solve or (lambda c, pk: runner.solve_case(c, pk, transport_factory))
     limits = spec.get("design_limits", case.get("design_limits")); base_case = {**copy.deepcopy(case), "design_limits": limits} if limits else copy.deepcopy(case)
     packages = spec.get("packages") or [case["basis"]["package_in_paper"]]; rows, warnings = [], []
+    use_rules = spec.get("suggestions", True); store = None
+    if use_rules:
+        store = rules or hazop_rules.load(); rp = hazop_rules.validate(store)
+        if rp: raise ValueError("the rules store is not valid: " + "; ".join(rp))
     if not (limits or {}).get("streams"): warnings.append("no safe limits are declared for any stream: consequences show simulated changes only; OSHA 1910.119(d)(2)(i)(D) has no criterion to evaluate (see the guardrail registry)")
     gaps = [{"node": n["id"], "parameters_without_a_deviation": sorted(set(ALLOWED) - {d["parameter"] for d in n["deviations"]})} for n in spec["nodes"] if set(ALLOWED) - {d["parameter"] for d in n["deviations"]}]
     for pk in packages:
@@ -137,7 +143,8 @@ def run_study(spec: dict, case: dict, transport_factory=None, solve=None) -> dic
         for n in spec["nodes"]:
             for d in n["deviations"]:
                 row = {"deviation_id": d["id"], "node": n["id"], "node_description": n.get("description"), "stream": n["stream"], "parameter": d["parameter"], "guide_word": d["guide_word"], "package": pk,
-                       "cause": d.get("cause"), "safeguards": d.get("safeguards", []), "size": d.get("size"), "size_source": d.get("anchor") or d.get("assumed")}
+                       "cause": d.get("cause"), "safeguards": d.get("safeguards", []), "size": d.get("size"), "size_source": d.get("anchor") or d.get("assumed"),
+                       "suggested": hazop_rules.suggest(store, d["parameter"], d["guide_word"], n.get("upstream_equipment")) if use_rules else None}
                 if d["guide_word"] == "REVERSE":
                     rows.append({**row, "evaluable": False, "solved": None, "applied": None, "watch": [], "consequences": [{"kind": "not_evaluable", "text": "reverse flow cannot be represented in a steady-state flowsheet; assess it by another method", "new": True}]}); continue
                 dc, applied = apply_deviation(base_case, n["stream"], d); res = solve(dc, pk)
@@ -146,19 +153,30 @@ def run_study(spec: dict, case: dict, transport_factory=None, solve=None) -> dic
                 guard = guardrails.evaluate(dc, res["sim"], d["id"])
                 rows.append({**row, "evaluable": True, "solved": True, "applied": applied, "watch": _watch(spec, base, res), "consequences": _consequences(base_guard, guard, res)})
     return {"study": spec["id"], "case": case["id"], "case_hash": schema.case_hash(case), "packages": packages, "none_flow_fraction": NONE_FLOW_FRACTION, "rows": rows, "gaps": gaps, "warnings": warnings, "note": NOTE, "about": spec.get("about"),
+            "rules": None if not use_rules else {"sources": [x for x in store["sources"]], "method_notes": store.get("method_notes", []), "mapping_note": "causes the source lists for 'other composition than usual' are offered for both AS_WELL_AS and PART_OF (this tool's mapping)", "status": "every suggestion is a candidate for the study team and is unreviewed"},
             "summary": {"deviations": len(rows), "not_evaluable": sum(r["evaluable"] is False for r in rows), "no_solution": sum(r["solved"] is False for r in rows),
                         "with_new_violation": sum(any(c["kind"] == "limit_violation" and c["new"] for c in r["consequences"]) for r in rows)}}
+
+
+def _sug(r) -> str:
+    sg = r.get("suggested")
+    if not sg: return ""
+    c = "; ".join(x["text"] for x in sg["causes"]); t = "; ".join(x["text"] for x in sg["safeguard_types"])
+    return (f"causes: {c}" if c else "") + (" / " if c and t else "") + (f"safeguard types: {t}" if t else "")
 
 
 def render_markdown(ws: dict) -> str:
     L = [f"# HAZOP deviation worksheet: {ws['study']} (case {ws['case']}, hash {ws['case_hash']})", "", f"> {ws['note']}", ""]
     if ws.get("about"): L += [f"> **About this study:** {ws['about']}", ""]
     L += [f"**Warning:** {w}" for w in ws["warnings"]]; L += [f"**Coverage gap:** node {g['node']} has no deviation for {', '.join(g['parameters_without_a_deviation'])}" for g in ws["gaps"]]
-    L += ["", "| Node | Deviation | Package | Applied | Cause (team) | Consequences (simulation) | Safeguards (team) |", "|---|---|---|---|---|---|---|"]
+    L += ["", "| Node | Deviation | Package | Applied | Cause (team) | Consequences (simulation) | Safeguards (team) | Suggestions (rules store, unreviewed) |", "|---|---|---|---|---|---|---|---|"]
     for r in ws["rows"]:
         ap = f"{r['applied']['quantity']} {r['applied']['before']:.4g} to {r['applied']['after']:.4g} {r['applied']['unit']}" if r["applied"] else "-"
         cons = "; ".join(f"{c['kind']}: {c['text']}" + ("" if c["new"] else " (already in the baseline)") for c in r["consequences"]) or "no new violation or finding"
         watch = "; ".join(f"{w['stream']} {w['property']} {w['baseline']:.4g} to {w['deviated']:.4g}" for w in r["watch"] if w["baseline"] is not None and w["deviated"] is not None)
-        L.append(f"| {r['node']} | {r['guide_word']} {r['parameter']} ({r['stream']}) | {r['package']} | {ap} | {r['cause'] or ''} | {cons}{' [' + watch + ']' if watch else ''} | {'; '.join(r['safeguards'])} |")
+        L.append(f"| {r['node']} | {r['guide_word']} {r['parameter']} ({r['stream']}) | {r['package']} | {ap} | {r['cause'] or ''} | {cons}{' [' + watch + ']' if watch else ''} | {'; '.join(r['safeguards'])} | {_sug(r)} |")
+    if ws.get("rules"):
+        L += ["", "**Sources of the suggestions** (candidates for the team, none reviewed):"] + [f"- {x['title']} ({x['url']}); {x['how_read']}; licence: {x['licence']}" for x in ws["rules"]["sources"]]
+        L += [f"- Method note: {m['text']}" for m in ws["rules"]["method_notes"]] + [f"- Mapping: {ws['rules']['mapping_note']}"]
     s = ws["summary"]; L += ["", f"{s['deviations']} deviations: {s['with_new_violation']} with a new limit violation, {s['no_solution']} without a steady-state solution, {s['not_evaluable']} not evaluable."]
     return "\n".join(L)

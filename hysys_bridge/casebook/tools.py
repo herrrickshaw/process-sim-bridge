@@ -3,7 +3,7 @@ the ledger is only written with confirm=true; no simulator case is saved."""
 from __future__ import annotations
 import glob, os, re
 import json
-from . import schema, runner, ledger, hazop
+from . import schema, runner, ledger, hazop, hazop_rules
 
 DEFAULT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases")
 
@@ -63,6 +63,14 @@ def t_hazop(a):
     ws = hazop.run_study(spec, case); return {"ran": True, "worksheet": ws, "markdown": hazop.render_markdown(ws)}
 
 
+def t_hazop_rules(a):
+    st = hazop_rules.load(); probs = hazop_rules.validate(st)
+    if probs: return {"valid": False, "problems": probs}
+    if "parameter" not in a: return {"valid": True, "sources": st["sources"], "counts": {k: len(st[k]) for k in ("causes", "safeguard_types", "worked_examples", "method_notes")}, "method_notes": st["method_notes"]}
+    if a.get("guide_word") not in hazop_rules.GUIDE_WORDS: raise ValueError(f"guide_word must be one of {sorted(hazop_rules.GUIDE_WORDS)}")
+    return {"valid": True, "suggestions": hazop_rules.suggest(st, a["parameter"], a["guide_word"], a.get("upstream_equipment")), "sources": st["sources"], "status": "candidates for the study team, none reviewed"}
+
+
 _s = lambda props, req=(): {"type": "object", "properties": props, "required": list(req)}
 TOOLS = {
     "casebook_list": (t_list, "List the reference cases (from published studies) in the operator's case directory: status, validity, and whether every unit type is verified on the DWSIM backend.", _s({})),
@@ -71,4 +79,6 @@ TOOLS = {
                      _s({"case_id": {"type": "string"}, "packages": {"type": "array", "items": {"type": "string"}}, "scenarios": {"type": "array", "items": {"type": "string"}}, "confirm": {"type": "boolean"}}, ["case_id"])),
     "casebook_hazop": (t_hazop, "Run a HAZOP deviation study (a spec in the operator's study directory) on its casebook case: each guide word plus parameter plus size is applied to a feed stream, solved on DWSIM (needs DWSIM_MCP_CMD), and the consequences are read from the simulation and the guardrails (declared safe limits, material balance). Returns a worksheet; causes and safeguards are the team's, no severity or recommendation is assigned, steady-state only. Nothing is written.",
                        _s({"spec_id": {"type": "string"}, "packages": {"type": "array", "items": {"type": "string"}}}, ["spec_id"])),
+    "casebook_hazop_rules": (t_hazop_rules, "Look up the HAZOP cause and safeguard rules store: candidate causes for a guide word and parameter (optionally limited to the equipment you say is upstream), safeguard types, worked examples from the cited sources, and method notes. Every entry names the source it came from and how that source was read; all are unreviewed candidates for the study team. With no parameter, returns the sources and counts. Nothing is written.",
+                              _s({"parameter": {"type": "string"}, "guide_word": {"type": "string"}, "upstream_equipment": {"type": "array", "items": {"type": "string"}}})),
 }

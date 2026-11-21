@@ -5,7 +5,7 @@
   "Steam Tables"
  ],
  "example": true,
- "about": "A DEMONSTRATION of the runner on the DWSIM tutorial exchanger. The safe limits below are SYNTHETIC (invented for the demonstration, not plant limits) and the causes, safeguards and sizes are placeholders; nothing here is a real study.",
+ "about": "A DEMONSTRATION of the runner on the DWSIM tutorial exchanger. The safe limits below are SYNTHETIC (invented for the demonstration, not plant limits) and the causes, safeguards and sizes are placeholders; nothing here is a real study. The upstream equipment listed for each node is also a placeholder, used only to show the rules-store filter.",
  "design_limits": {
   "streams": {
    "HOT_OUT": {
@@ -83,6 +83,11 @@
      "assumed": "demonstration size",
      "cause": "placeholder: heater overshoot"
     }
+   ],
+   "upstream_equipment": [
+    "pump",
+    "valve",
+    "heater"
    ]
   },
   {
@@ -119,6 +124,10 @@
      "assumed": "demonstration size",
      "cause": "placeholder"
     }
+   ],
+   "upstream_equipment": [
+    "pump",
+    "valve"
    ]
   }
  ]

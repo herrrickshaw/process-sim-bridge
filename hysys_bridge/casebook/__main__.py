@@ -1,4 +1,4 @@
-"""CLI: python3 -m hysys_bridge.casebook validate <dir> | run <case-id> [--reproduce] [--no-ledger] | hazop <study-id|path.json> [--out worksheet.md] | ledger <case-id>   (DWSIM_MCP_CMD for run; CASEBOOK_DIR for the case directory)"""
+"""CLI: python3 -m hysys_bridge.casebook validate <dir> | run <case-id> [--reproduce] [--no-ledger] | hazop <study-id|path.json> [--out worksheet.md] | hazop-rules [parameter guide_word] | ledger <case-id>   (DWSIM_MCP_CMD for run; CASEBOOK_DIR for the case directory)"""
 from __future__ import annotations
 import glob, os, sys
 from . import guardrails, hazop, ledger, runner, schema, tools
@@ -39,6 +39,8 @@ def main(argv):
         if "--out" in argv: open(argv[argv.index("--out") + 1], "w").write(md + "\n"); print(f"worksheet written to {argv[argv.index('--out') + 1]}")
         else: print(md)
         return 0
+    if cmd == "hazop-rules":
+        out = tools.t_hazop_rules({"parameter": argv[1], "guide_word": argv[2]} if len(argv) > 2 else {}); print(__import__("json").dumps(out, indent=1)); return 0 if out.get("valid") else 1
     if cmd == "ledger":
         case = tools._load(argv[1]); h = schema.case_hash(case); rows = [r for r in ledger.read() if r["case"] == case["id"] and r["case_hash"] == h]
         print(f"LEDGER ROWS {len(rows)} for {case['id']} hash {h}"); return 0
