@@ -5,7 +5,12 @@ from __future__ import annotations
 import json, os
 
 RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "guardrails", "rules.json")
-ACTIVE_TEXT = {"public-text-read", "user-supplied"}
+ACTIVE_TEXT = {"public-text-read", "user-supplied", "definition"}
+ADVISORY_TEXT = {"trade-article-read", "forum-snippet-only"}      # advisory tier: evaluated, but never a violation
+PSI_KPA = 6.894757
+ATM_KPA = 101.325
+NPSH_RANGES = {"low": (1.0, 1.3), "mitigated": (1.1, 1.5), "cold_warm_water": (1.5, 2.0), "very_high": (2.0, 2.5)}      # WaterWorld, NPSH margin ratio by suction energy, read 2026-11-21
+G = 9.80665
 LIMIT_KEYS = {"T_C": "C", "P_kPa": "kPa", "mass_kg_h": "kg/h"}
 F30_K = 16.7                      # 30 F expressed in kelvin, 1910.106(a)(19)(iii) to (v)
 
@@ -37,6 +42,30 @@ def validate_limits(case: dict) -> list[str]:
         if not (num(d.get("set_pressure_kPa")) and d["set_pressure_kPa"] > 0 and num(d.get("accumulation_pct")) and d["accumulation_pct"] >= 0): p.append(f"design_limits.relief.{u}: needs set_pressure_kPa > 0 and accumulation_pct >= 0")
         if not d.get("anchor"): p.append(f"design_limits.relief.{u}: needs an anchor naming the standard, clause and edition the accumulation comes from (licensed copy supplied by the user)")
         if d.get("stream") not in ids: p.append(f"design_limits.relief.{u}.stream must be the stream whose pressure is checked")
+    p += _equipment_problems(dl, ids, num)
+    return p
+
+
+def _equipment_problems(dl, ids, num) -> list[str]:
+    p = []
+    for u, d in (dl.get("vessels") or {}).items():
+        if d.get("stream") not in ids: p.append(f"design_limits.vessels.{u}.stream must be the stream whose operating pressure and temperature are checked")
+        if not (num(d.get("design_pressure_kPa")) and d["design_pressure_kPa"] > 0) and "design_temperature_C" not in d: p.append(f"design_limits.vessels.{u}: needs design_pressure_kPa > 0 or design_temperature_C")
+        if "design_pressure_kPa" in d and d.get("pressure_basis") not in ("gauge", "absolute"): p.append(f"design_limits.vessels.{u}.pressure_basis must be gauge or absolute")
+        if "design_temperature_C" in d and not num(d["design_temperature_C"]): p.append(f"design_limits.vessels.{u}.design_temperature_C must be a number")
+        if not d.get("anchor"): p.append(f"design_limits.vessels.{u}: needs an anchor (the datasheet the design values come from)")
+    for u, d in (dl.get("pumps") or {}).items():
+        if d.get("suction_stream") not in ids: p.append(f"design_limits.pumps.{u}.suction_stream must be a stream")
+        for k in ("npsh_required_m", "vapor_pressure_kPa", "density_kg_m3"):
+            if not (num(d.get(k)) and d[k] > 0): p.append(f"design_limits.pumps.{u}.{k} must be a number > 0")
+        if "static_head_m" in d and not num(d["static_head_m"]): p.append(f"design_limits.pumps.{u}.static_head_m must be a number")
+        if d.get("suction_energy") not in NPSH_RANGES: p.append(f"design_limits.pumps.{u}.suction_energy must be one of {sorted(NPSH_RANGES)}")
+        if not d.get("anchor"): p.append(f"design_limits.pumps.{u}: needs an anchor (the pump data sheet)")
+    for u, d in (dl.get("valves") or {}).items():
+        for k in ("inlet_stream", "outlet_stream"):
+            if d.get(k) not in ids: p.append(f"design_limits.valves.{u}.{k} must be a stream")
+        if not (num(d.get("system_dp_kPa")) and d["system_dp_kPa"] > 0): p.append(f"design_limits.valves.{u}.system_dp_kPa must be a number > 0 (the total system pressure drop including the valve)")
+        if not d.get("anchor"): p.append(f"design_limits.valves.{u}: needs an anchor (where the system pressure drop comes from)")
     return p
 
 
@@ -94,6 +123,41 @@ def evaluate(case: dict, sim: dict[str, dict], scenario: str, rule_table: dict |
         for u, d in relief.items():
             lim = d["set_pressure_kPa"] * (1 + d["accumulation_pct"] / 100); got = sim[d["stream"]]["P"]
             out.append(_row(rid, "violation" if got > lim else "pass", u, f"stream {d['stream']} {got:.4g} kPa against set {d['set_pressure_kPa']} x (1 + {d['accumulation_pct']} %) = {lim:.4g} kPa ({d['anchor']})"))
+    out += _advisory(dl, sim, R)
+    return out
+
+
+def _advisory(dl: dict, sim: dict, R: dict) -> list[dict]:
+    """Advisory tier (trade articles and forum discussions) and the NPSH definition. Statuses: advisory, info, pass, violation (only the NPSH definition)."""
+    out = []; has = lambda rid: rid in R
+    for u, d in (dl.get("vessels") or {}).items():
+        st = sim[d["stream"]]
+        if "design_pressure_kPa" in d and has("forum-vessel-design-pressure-margin"):
+            rid = "forum-vessel-design-pressure-margin"; op_g = st["P"] - ATM_KPA; des_g = d["design_pressure_kPa"] - (ATM_KPA if d["pressure_basis"] == "absolute" else 0)
+            need = op_g + max(0.10 * op_g, 25 * PSI_KPA); short = des_g < need
+            out.append(_row(rid, "advisory" if short else "pass", u, f"design {des_g:.4g} kPa(g) against operating {op_g:.4g} kPa(g) plus the greater of 10 % and 25 psi = {need:.4g} kPa(g); a rule of thumb, owner preference, not a code limit"))
+        if "design_temperature_C" in d and has("forum-vessel-design-temperature-margin"):
+            rid = "forum-vessel-design-temperature-margin"; m = d["design_temperature_C"] - st["T"]
+            status, why = ("pass", "at or above the commonly quoted 28 C (50 F)") if m >= 27.8 else ("advisory", "inside the quoted 15 to 28 C range, below the commonly quoted 28 C") if m >= 15 else ("advisory", "below every quoted margin (15 to 28 C)")
+            out.append(_row(rid, status, u, f"design {d['design_temperature_C']:.4g} C is {m:+.1f} C above the operating {st['T']:.1f} C: {why}"))
+    for u, d in (dl.get("pumps") or {}).items():
+        st = sim[d["suction_stream"]]; npsha = (st["P"] - d["vapor_pressure_kPa"]) * 1000 / (d["density_kg_m3"] * G) + d.get("static_head_m", 0.0); ratio = npsha / d["npsh_required_m"]
+        if has("pump-npsha-vs-npshr"):
+            out.append(_row("pump-npsha-vs-npshr", "violation" if ratio < 1.0 else "pass", u, f"NPSHA {npsha:.3g} m against NPSHR {d['npsh_required_m']:.3g} m: ratio {ratio:.2f} (friction ignored)"))
+        if has("trade-pump-npsh-margin-ratio") and ratio >= 1.0:
+            lo, hi = NPSH_RANGES[d["suction_energy"]]
+            status, why = ("advisory", f"below the quoted minimum {lo}") if ratio < lo else ("info", f"inside the quoted {lo} to {hi}") if ratio < hi else ("pass", f"at or above {hi}")
+            out.append(_row("trade-pump-npsh-margin-ratio", status, u, f"ratio {ratio:.2f} for {d['suction_energy']} suction energy: {why} (trade article, preliminary)"))
+    for u, d in (dl.get("valves") or {}).items():
+        a, b = sim[d["inlet_stream"]], sim[d["outlet_stream"]]; dp = a["P"] - b["P"]; frac = dp / d["system_dp_kPa"]
+        if has("trade-valve-pressure-drop-fraction"):
+            floor = 10 * PSI_KPA; need = max(0.20 * d["system_dp_kPa"], floor)
+            status, why = ("advisory", f"below the rule of 20 % of the system drop or 10 psi ({need:.4g} kPa)") if dp < need else ("info", "above that rule but below the 33 % some sources quote") if frac < 0.33 else ("pass", "at or above every quoted fraction")
+            out.append(_row("trade-valve-pressure-drop-fraction", status, u, f"valve drop {dp:.4g} kPa is {100 * frac:.1f} % of the stated system drop {d['system_dp_kPa']:.4g} kPa: {why}; preliminary only"))
+        if has("trade-valve-flashing"):
+            va, vb = a.get("vapor_fraction"), b.get("vapor_fraction")
+            if va is None or vb is None: out.append(_row("trade-valve-flashing", "not-evaluated", u, "no vapour fraction returned for the valve streams"))
+            else: out.append(_row("trade-valve-flashing", "info" if vb - va > 0.001 else "pass", u, f"vapour fraction {va:.4g} to {vb:.4g}" + ("; flashing across the valve: a full flashing and cavitation calculation is needed" if vb - va > 0.001 else "")))
     return out
 
 

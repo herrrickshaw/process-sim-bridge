@@ -628,13 +628,20 @@ class Guardrails(unittest.TestCase):
         return {"HOT_IN": st(126.85, 304.0, 3600.0), "COLD_IN": st(26.85, 101.325, 7200.0), "HOT_OUT": st(hot_out_T, 294.0, mass), "COLD_OUT": st(47.4, 96.3, 7200.0)}
     def status(self, rows, rule, obj=None): return [r["status"] for r in rows if r["rule"] == rule and (obj is None or r["object"] == obj)]
 
-    def test_only_read_or_supplied_rules_are_active_and_paywalled_ones_say_so(self):
+    def test_registry_provenance_is_stated_for_every_rule(self):
         R = G.rules()
         for r in R.values():
-            if r["text_status"] == "public-text-read": self.assertTrue(r["read"] and r["source"].startswith("https://www.osha.gov/"), r["id"])
-            else: self.assertEqual(r["text_status"], "paywalled-not-read"); self.assertIsNone(r["read"])
+            ts = r["text_status"]
+            if ts == "public-text-read": self.assertTrue(r["read"] and r["source"].startswith("https://www.osha.gov/"), r["id"])
+            elif ts == "paywalled-not-read": self.assertIsNone(r["read"], r["id"])
+            elif ts == "trade-article-read": self.assertTrue(r["read"] and r["sources"] and any(x["how_read"].startswith(("read", "the opening")) for x in r["sources"]), r["id"])
+            elif ts == "forum-snippet-only": self.assertIsNone(r["read"], r["id"]); self.assertTrue(r["sources"] and all("only" in x["how_read"] or "blocked" in x["how_read"] for x in r["sources"]), r["id"])
+            elif ts == "definition": self.assertEqual(r["tier"], "definition")
+            else: self.fail(f"{r['id']}: unknown text_status {ts}")
+            if r.get("tier") == "advisory": self.assertTrue(r["sources"], r["id"])
         rows = G.evaluate(self.case(), self.sim(), "base")
         self.assertEqual(self.status(rows, "api-520-521-relief-overpressure"), ["not-evaluated"])      # nothing built in: without supplied numbers the rule does not evaluate
+        for rid in ("forum-vessel-design-pressure-margin", "pump-npsha-vs-npshr", "trade-valve-flashing"): self.assertEqual(self.status(rows, rid), [], rid)      # no equipment declared, no advisory row
 
     def test_declared_limits_pass_and_violate(self):
         ok = G.evaluate(self.case(), self.sim(86.1), "base"); self.assertEqual(self.status(ok, "osha-1910.119-d2iD-safe-limits", "HOT_OUT"), ["pass", "pass"])
@@ -664,6 +671,67 @@ class Guardrails(unittest.TestCase):
     def test_registered_but_unimplemented_rules_never_produce_rows(self):
         c = self.case(); c["design_limits"]["relief"] = {"X": {"set_pressure_kPa": 280.0, "accumulation_pct": 10.0, "stream": "HOT_OUT", "anchor": "synthetic"}}
         self.assertEqual([r for r in G.evaluate(c, self.sim(), "base") if r["rule"] == "nfpa-30-flammable-liquids"], [])
+
+    def adv(self, **eq):
+        c = self.case(); c["design_limits"].update(eq); return c
+    def test_vessel_pressure_margin_uses_the_greater_of_10_percent_and_25_psi(self):
+        st = lambda P: (lambda s: (s["HOT_OUT"].update(P=P), s)[1])(self.sim())
+        v = lambda dp, basis="gauge": self.adv(vessels={"V": {"stream": "HOT_OUT", "design_pressure_kPa": dp, "pressure_basis": basis, "anchor": "synthetic"}})
+        rid = "forum-vessel-design-pressure-margin"
+        # operating 294 kPa abs = 192.7 kPa(g): 25 psi (172.4) governs over 10 % (19.3): need 365.1 kPa(g)
+        for dp, basis, want in ((400.0, "gauge", "pass"), (300.0, "gauge", "advisory"), (400.0 + 101.325, "absolute", "pass"), (400.0, "absolute", "advisory"), (365.0, "gauge", "advisory"), (365.2, "gauge", "pass")):
+            self.assertEqual(self.status(G.evaluate(v(dp, basis), self.sim(), "base"), rid), [want], (dp, basis))
+        # high pressure: operating 2101.325 kPa abs = 2000 kPa(g): 10 % (200) governs over 25 psi: need 2200
+        hi = st(2101.325)
+        for dp, want in ((2190.0, "advisory"), (2210.0, "pass")): self.assertEqual(self.status(G.evaluate(v(dp), hi, "base"), rid), [want], dp)
+
+    def test_vessel_temperature_margin_bands(self):
+        c = lambda dT: self.adv(vessels={"V": {"stream": "HOT_OUT", "design_temperature_C": dT, "anchor": "synthetic"}})
+        for dT, want in ((86.1 + 27.9, "pass"), (86.1 + 27.7, "advisory"), (86.1 + 15.0, "advisory"), (86.1 + 14.9, "advisory")):
+            self.assertEqual(self.status(G.evaluate(c(dT), self.sim(), "base"), "forum-vessel-design-temperature-margin"), [want], dT)
+        self.assertIn("inside the quoted", next(r["detail"] for r in G.evaluate(c(86.1 + 20), self.sim(), "base") if r["rule"].endswith("temperature-margin")))
+        self.assertIn("below every quoted", next(r["detail"] for r in G.evaluate(c(86.1 + 10), self.sim(), "base") if r["rule"].endswith("temperature-margin")))
+
+    def test_pump_npsh_ratio_definition_and_margin(self):
+        pump = lambda npshr, energy: self.adv(pumps={"P": {"suction_stream": "COLD_IN", "npsh_required_m": npshr, "vapor_pressure_kPa": 3.17, "density_kg_m3": 997.0, "suction_energy": energy, "anchor": "synthetic"}})
+        ev = lambda npshr, energy: G.evaluate(pump(npshr, energy), self.sim(), "base")       # NPSHA = (101.325 - 3.17) kPa / (997 x 9.80665) = 10.04 m
+        self.assertEqual(self.status(ev(5.0, "low"), "pump-npsha-vs-npshr"), ["pass"]); self.assertEqual(self.status(ev(5.0, "low"), "trade-pump-npsh-margin-ratio"), ["pass"])      # ratio 2.0
+        self.assertEqual(self.status(ev(7.0, "cold_warm_water"), "trade-pump-npsh-margin-ratio"), ["advisory"])         # ratio 1.43 below 1.5
+        self.assertEqual(self.status(ev(7.0, "mitigated"), "trade-pump-npsh-margin-ratio"), ["info"])                     # inside 1.1 to 1.5
+        self.assertEqual(self.status(ev(11.0, "low"), "pump-npsha-vs-npshr"), ["violation"]); self.assertEqual(self.status(ev(11.0, "low"), "trade-pump-npsh-margin-ratio"), [])      # below 1.0: a violation by definition, no margin row
+        c = pump(5.0, "low"); c["design_limits"]["pumps"]["P"]["static_head_m"] = -6.0
+        self.assertEqual(self.status(G.evaluate(c, self.sim(), "base"), "pump-npsha-vs-npshr"), ["violation"])             # a suction lift counts
+
+    def test_valve_drop_fraction_and_flashing(self):
+        def run(pin, pout, sys_dp, vin=0.0, vout=0.0):
+            s = self.sim(); s["HOT_IN"].update(P=pin, vapor_fraction=vin); s["HOT_OUT"].update(P=pout, vapor_fraction=vout)
+            c = self.adv(valves={"V": {"inlet_stream": "HOT_IN", "outlet_stream": "HOT_OUT", "system_dp_kPa": sys_dp, "anchor": "synthetic"}}); return G.evaluate(c, s, "base")
+        rid = "trade-valve-pressure-drop-fraction"
+        for (pin, pout, sdp), want in (((304, 294, 100), "advisory"), ((304, 294, 40), "advisory"), ((500, 300, 600), "pass"), ((500, 300, 800), "info"), ((500, 300, 1000), "info"), ((500, 300, 1001), "advisory")):
+            self.assertEqual(self.status(run(pin, pout, sdp), rid), [want], (pin, pout, sdp))        # (304,294,40) is 25 % but under the 0.7 bar floor; (500,300,1000) is exactly 20 %, which meets the rule
+        self.assertEqual(self.status(run(500, 300, 100, 0.0, 0.1), "trade-valve-flashing"), ["info"]); self.assertEqual(self.status(run(500, 300, 100, 0.0, 0.0), "trade-valve-flashing"), ["pass"])
+        s = self.sim(); c = self.adv(valves={"V": {"inlet_stream": "HOT_IN", "outlet_stream": "HOT_OUT", "system_dp_kPa": 100.0, "anchor": "s"}})
+        self.assertEqual(self.status(G.evaluate(c, s, "base"), "trade-valve-flashing"), ["not-evaluated"])      # the helper sim carries no vapour fraction
+
+    def test_advisory_rules_never_produce_a_violation(self):
+        s = self.sim(); s["HOT_OUT"].update(P=10.0, T=500.0, vapor_fraction=1.0); s["HOT_IN"].update(vapor_fraction=0.0)
+        c = self.adv(vessels={"V": {"stream": "HOT_OUT", "design_pressure_kPa": 1.0, "pressure_basis": "absolute", "design_temperature_C": 1.0, "anchor": "s"}},
+                     valves={"V": {"inlet_stream": "HOT_IN", "outlet_stream": "HOT_OUT", "system_dp_kPa": 1.0, "anchor": "s"}})
+        advisory = {r["id"] for r in G.rules().values() if r.get("tier") == "advisory"}
+        got = {r["status"] for r in G.evaluate(c, s, "base") if r["rule"] in advisory}; self.assertTrue(got) ; self.assertNotIn("violation", got)
+
+    def test_equipment_validation_rules(self):
+        muts = [("vessels.V.stream must be", lambda d: d.update(vessels={"V": {"stream": "NOPE", "design_pressure_kPa": 5, "pressure_basis": "gauge", "anchor": "x"}})),
+                ("pressure_basis must be", lambda d: d.update(vessels={"V": {"stream": "HOT_OUT", "design_pressure_kPa": 5, "anchor": "x"}})),
+                ("needs design_pressure_kPa > 0 or design_temperature_C", lambda d: d.update(vessels={"V": {"stream": "HOT_OUT", "anchor": "x"}})),
+                ("vessels.V: needs an anchor", lambda d: d.update(vessels={"V": {"stream": "HOT_OUT", "design_temperature_C": 5}})),
+                ("npsh_required_m must be", lambda d: d.update(pumps={"P": {"suction_stream": "COLD_IN", "vapor_pressure_kPa": 3, "density_kg_m3": 997, "suction_energy": "low", "anchor": "x"}})),
+                ("suction_energy must be", lambda d: d.update(pumps={"P": {"suction_stream": "COLD_IN", "npsh_required_m": 5, "vapor_pressure_kPa": 3, "density_kg_m3": 997, "suction_energy": "huge", "anchor": "x"}})),
+                ("suction_stream must be a stream", lambda d: d.update(pumps={"P": {"suction_stream": "NOPE", "npsh_required_m": 5, "vapor_pressure_kPa": 3, "density_kg_m3": 997, "suction_energy": "low", "anchor": "x"}})),
+                ("system_dp_kPa must be", lambda d: d.update(valves={"V": {"inlet_stream": "HOT_IN", "outlet_stream": "HOT_OUT", "anchor": "x"}})),
+                ("outlet_stream must be a stream", lambda d: d.update(valves={"V": {"inlet_stream": "HOT_IN", "outlet_stream": "NOPE", "system_dp_kPa": 5, "anchor": "x"}}))]
+        for needle, f in muts:
+            c = schema.load(HX["A"]); d = {}; f(d); c["design_limits"] = d; self.assertTrue(any(needle in x for x in schema.validate(c)), needle)
 
     def test_relief_uses_only_supplied_numbers(self):
         c = self.case(); c["design_limits"]["relief"] = {"X": {"set_pressure_kPa": 280.0, "accumulation_pct": 10.0, "stream": "HOT_OUT", "anchor": "synthetic: clause and edition from a licensed copy go here"}}
