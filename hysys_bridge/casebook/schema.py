@@ -12,7 +12,7 @@ NEEDS_REVIEW = {"reviewed", "built", "verified"}
 READ = {"full-text", "abstract-only", "snippet-only", "computed"}      # computed: the reference is an independent calculation, not a document
 UNIT_TYPES = {"mixer", "splitter", "pump", "heater", "cooler", "valve", "compressor", "separator", "column", "reactor", "exchanger", "recycle", "conversion_reactor", "equilibrium_reactor"}
 SPEC_BY_OUTLET = {"heater", "cooler", "pump", "valve", "compressor"}      # units whose outlet stream carries the published specification, so T and P are required there
-KINDS = {"unit_duty": "kJ/h", "stream_T_C": "C", "stream_P_kPa": "kPa", "stream_mass_kg_h": "kg/h", "stream_vapor_fraction": "-", "stream_mass_fraction": "-", "streams_mass_sum_kg_h": "kg/h", "units_duty_sum_kJ_h": "kJ/h"}
+KINDS = {"unit_duty": "kJ/h", "stream_T_C": "C", "stream_P_kPa": "kPa", "stream_mass_kg_h": "kg/h", "stream_vapor_fraction": "-", "stream_mass_fraction": "-", "stream_mole_fraction": "-", "streams_mass_sum_kg_h": "kg/h", "units_duty_sum_kJ_h": "kJ/h"}
 REACTORS = {"conversion_reactor": "conversion", "equilibrium_reactor": "equilibrium"}      # unit type -> kind of reaction it carries
 EQ_BASES = {"partial pressure", "activity", "fugacity", "molar fraction", "molar concentration", "mass concentration", "mass fraction"}      # the server's list for dwsim_reaction_add_equilibrium
 EXCHANGER_MODES = {"UA": "CalcBothTemp_UA", "hot_outlet_T": "CalcTempColdOut", "cold_outlet_T": "CalcTempHotOut"}      # case word -> DWSIM CalculationMode; hot_outlet_T = the hot outlet temperature is given and the cold outlet follows (verified 2026-11-21)
@@ -95,7 +95,9 @@ def validate(case: dict) -> list[str]:
     src = case["source"]
     for k in ("title", "licence", "use", "read", "fetch_route"):
         if not src.get(k): p.append(f"source.{k} is required")
-    if not (src.get("doi") or src.get("url")): p.append("source needs a doi or a url")
+    lc = src.get("local_copy")
+    if not (src.get("doi") or src.get("url") or (isinstance(lc, dict) and lc.get("filename") and len(str(lc.get("sha256", ""))) == 64 and lc.get("supplied_by"))):
+        p.append("source needs a doi, a url, or a local_copy {filename, sha256, supplied_by} for a document with no public address")
     if src.get("read") not in READ: p.append(f"source.read must be one of {sorted(READ)}")
     b = case["basis"]
     for k in ("compounds", "package_in_paper", "packages", "composition_basis"):
@@ -171,7 +173,8 @@ def validate(case: dict) -> list[str]:
         elif r["kind"] == "streams_mass_sum_kg_h":
             if not (isinstance(r.get("targets"), list) and r["targets"] and set(r["targets"]) <= ids): p.append(f"{pa}.targets must be a non-empty list of stream ids")
         elif r.get("target") not in ids: p.append(f"{pa}.target must be a stream id")
-        if r["kind"] == "stream_mass_fraction" and r.get("compound") not in comps: p.append(f"{pa}.compound must be one of the case's compounds")
+        if r["kind"] in ("stream_mass_fraction", "stream_mole_fraction") and r.get("compound") not in comps: p.append(f"{pa}.compound must be one of the case's compounds")
+        if r["kind"] == "stream_mole_fraction" and set(b.get("molar_mass_g_mol", {})) != set(comps): p.append(f"{pa}: a mole-fraction reference needs basis.molar_mass_g_mol for every compound (DWSIM returns mass fractions)")
     if not case["reported"]: p.append("reported is empty: a case without a published result to compare against is not a reference case")
     base_problems = validate({**case, "scenarios": [], "reproduce": None}) if case.get("scenarios") else []   # a scenario reports only the problems it adds, not the base case's again
     ssc = set()

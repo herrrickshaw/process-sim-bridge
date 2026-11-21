@@ -12,7 +12,7 @@ def default_transport():
     return StdioTransport(shlex.split(cmd))
 
 
-def _simulated(r, fs, be, cache):
+def _simulated(r, fs, be, cache, mm=None):
     rs = lambda sid: cache.setdefault(sid, be.read_stream(sid))
     def duty(uid):
         u = fs.units[uid]
@@ -23,6 +23,10 @@ def _simulated(r, fs, be, cache):
     if r["kind"] == "unit_duty": return duty(r["target"])
     if r["kind"] == "units_duty_sum_kJ_h": return sum(duty(u) for u in r["targets"])
     if r["kind"] == "streams_mass_sum_kg_h": return sum(rs(t)["mass"] for t in r["targets"])
+    if r["kind"] == "stream_mole_fraction":                                    # DWSIM returns mass fractions: convert with the case's own molar masses
+        mf = rs(r["target"])["mass_fractions"]
+        if r["compound"] not in mf or not mm or set(mf) - set(mm): raise RuntimeError(f"cannot convert to a mole fraction of {r['compound']}: need DWSIM's mass fractions and a molar mass for every compound")
+        n = {c: w / mm[c] for c, w in mf.items()}; return n[r["compound"]] / sum(n.values())
     if r["kind"] == "stream_mass_fraction":
         mf = rs(r["target"])["mass_fractions"]
         if r["compound"] not in mf: raise RuntimeError(f"DWSIM returned no mass fraction of {r['compound']} for {r['target']}")
@@ -61,7 +65,7 @@ def run_case(case: dict, transport_factory=None, packages: list[str] | None = No
                 solved = be.solve(); found = diagnose.classify(be.last_findings)
                 if not solved: out.append({"scenario": scen, "package": package, "solved": False, "why": be.last_solve, "findings": found, "next_step": diagnose.next_step(found)}); continue
                 cache, vals = {}, {}
-                for r in sc_case["reported"]: vals[r["name"]] = compare_item(r, _simulated(r, fs, be, cache), case["tolerance"]["pass_rel"])
+                for r in sc_case["reported"]: vals[r["name"]] = compare_item(r, _simulated(r, fs, be, cache, sc_case["basis"].get("molar_mass_g_mol")), case["tolerance"]["pass_rel"])
                 sim = {sid: cache.setdefault(sid, be.read_stream(sid)) for sid in fs.streams}
                 out.append({"scenario": scen, "package": package, "solved": True, "values": vals, "spec_mismatches": be.check_solution(), "findings": found, "guardrails": guardrails.evaluate(sc_case, sim, scen)})
             finally:
@@ -73,7 +77,8 @@ def run_case(case: dict, transport_factory=None, packages: list[str] | None = No
     solved = [o for o in out if o["solved"]]
     own = [o for o in solved if o["package"] == case["basis"]["package_in_paper"]]
     return {"case": case["id"], "case_hash": schema.case_hash(case), "ran": True, "results": out, "package_spread_rel": spread,
-            "paper_package_within_tol": bool(own) and len(own) == sum(o["package"] == case["basis"]["package_in_paper"] for o in out) and all(v["within_tol"] for o in own for v in o["values"].values()),
+            "paper_package_within_tol": None if case["basis"]["package_in_paper"] not in case["basis"]["packages"] else         # None: the source does not say which package it used, so there is nothing to compare against
+                                        bool(own) and len(own) == sum(o["package"] == case["basis"]["package_in_paper"] for o in out) and all(v["within_tol"] for o in own for v in o["values"].values()),
             "all_within_tol": bool(solved) and len(solved) == len(out) and all(v["within_tol"] for o in solved for v in o["values"].values()),
             "note": "within tolerance is not verification: a human reviews the case, the package spread and the scenario effects before status becomes verified"}
 

@@ -67,7 +67,7 @@ class Schema(unittest.TestCase):
     def test_structural_faults(self):
         feed = lambda c: c["streams"][0]
         self.planted(lambda c: c.pop("units"), "missing 'units'")
-        self.planted(lambda c: c["source"].pop("url"), "doi or a url")
+        self.planted(lambda c: c["source"].pop("url"), "or a local_copy")
         self.planted(lambda c: c["source"].update(read="skimmed"), "source.read")
         self.planted(lambda c: c["basis"].update(packages=[]), "basis.packages", n=2)                                   # also breaks the reproduce check
         self.planted(lambda c: c.update(status="finished"), "status must be")
@@ -787,6 +787,64 @@ class PumpCompressorValve(unittest.TestCase):
         self.assertGreater(b["outlet_T"], 25.0); self.assertGreater(d["compressor_duty"], b["compressor_duty"]); self.assertGreater(d["outlet_T"], b["outlet_T"])
         v = self.c("valve"); vb = {x["name"]: x["value"] for x in v["reported"]}; vs = {x["name"]: x["value"] for x in schema.apply_scenario(v, "to-30-bar")["reported"]}
         self.assertLess(vb["outlet_T"], 25.0); self.assertLess(vb["outlet_T"], vs["outlet_T"]); self.assertLess(vs["outlet_T"], 25.0)       # throttling a real gas cools it, less for a smaller drop
+
+
+ASPEN = {"flash": os.path.join(os.path.dirname(CASE), "methanol-water-adiabatic-flash-aspen-getting-started.json"), "mch": os.path.join(os.path.dirname(CASE), "mch-extractive-distillation-aspen-getting-started.json")}
+
+
+class AspenGettingStarted(unittest.TestCase):
+    """Cases transcribed from the printed results of Aspen Plus 2006.5 'Getting Started' (a document supplied by the user, no public address)."""
+    def test_both_validate_and_carry_a_local_copy_identity(self):
+        for k, f in ASPEN.items():
+            c = schema.load(f); self.assertEqual(schema.validate(c), [], k); lc = c["source"]["local_copy"]; self.assertEqual(len(lc["sha256"]), 64); self.assertTrue(lc["supplied_by"])
+            self.assertFalse(c["review"]["human"]); self.assertIn("all rights reserved", c["source"]["licence"])
+
+    def test_local_copy_rule(self):
+        for key in ("sha256", "supplied_by", "filename"):
+            c = schema.load(ASPEN["flash"]); c["source"]["local_copy"].pop(key); self.assertTrue(any("local_copy" in x for x in schema.validate(c)), key)
+        c = schema.load(ASPEN["flash"]); c["source"]["local_copy"]["sha256"] = "abc"; self.assertTrue(any("local_copy" in x for x in schema.validate(c)))
+
+    def test_flash_printed_numbers_are_self_consistent(self):
+        """Printed vapour: 8.262 methanol and 2.494 water lbmol/h = 309.677 lb/h; flash 165.28321 F; vapour fraction 0.10756625 x 100 lbmol/h = 10.757 lbmol/h printed."""
+        c = schema.load(ASPEN["flash"]); mm = c["basis"]["molar_mass_g_mol"]; r = {x["name"]: x for x in c["reported"]}
+        self.assertAlmostEqual((8.262 * mm["Methanol"] + 2.494 * mm["Water"]) / 309.677, 1.0, delta=1e-4)
+        self.assertAlmostEqual(r["vapor_mass_flow"]["value"], 309.677 * 0.45359237, places=3); self.assertAlmostEqual(r["flash_T"]["value"], (165.28321 - 32) / 1.8, places=3)
+        self.assertAlmostEqual(100 * r["flash_vapor_fraction"]["value"], 8.262 + 2.494, delta=0.01)
+        self.assertAlmostEqual(r["vapor_methanol_mass_fraction"]["value"], 8.262 * mm["Methanol"] / (8.262 * mm["Methanol"] + 2.494 * mm["Water"]), places=4)
+
+    def test_unknown_paper_package_gives_none_not_false(self):
+        c = schema.load(ASPEN["flash"]); self.assertEqual(c["basis"]["package_in_paper"], "not stated")
+        u = schema.load(CASE); u["basis"]["package_in_paper"] = "not stated"
+        self.assertIsNone(runner.run_case(u, transport_factory=FakeTransport, packages=[u["basis"]["packages"][0]], scenarios=["base"])["paper_package_within_tol"])
+        k = schema.load(CASE); self.assertIsInstance(runner.run_case(k, transport_factory=FakeTransport, packages=[k["basis"]["package_in_paper"]], scenarios=["base"])["paper_package_within_tol"], bool)
+
+    def test_mch_is_blocked_and_refuses_to_run(self):
+        c = schema.load(ASPEN["mch"]); self.assertEqual(c["status"], "blocked"); self.assertFalse(schema.capability(c)["buildable"])
+        self.assertFalse(runner.run_case(c)["ran"])
+
+    def test_mch_printed_numbers(self):
+        c = schema.load(ASPEN["mch"]); mm = c["basis"]["molar_mass_g_mol"]
+        self.assertAlmostEqual((5.219 * mm["Toluene"] + 0.262 * mm["Phenol"] + 194.519 * mm["Methylcyclohexane"]) / 19605.002, 1.0, delta=2e-5)     # the molar masses reproduce the printed mass flow
+        pur = {1200: 0.97257198}; pur.update({int(s["id"].split("-")[1]): next(o["set"] for o in s["overrides"] if o.get("reported")) for s in c["scenarios"]})
+        flows = sorted(pur); self.assertEqual(flows, list(range(1200, 2001, 100)))
+        self.assertTrue(all(pur[b] > pur[a] for a, b in zip(flows, flows[1:])))                                                                    # more solvent, purer distillate
+        interp = 1500 + 100 * (0.98 - pur[1500]) / (pur[1600] - pur[1500])
+        self.assertAlmostEqual(interp, 1516.9, delta=0.1); self.assertIn("1515.07763", c["source"]["note"]); self.assertIn("1517.1", c["source"]["note"])     # the guide's own two answers
+
+    def test_mole_fraction_reference_runs_end_to_end(self):
+        c = schema.load(FLASH); mm = {"Water": 18.015, "Ethanol": 46.069}; c["basis"]["molar_mass_g_mol"] = mm; x = (0.66 / mm["Ethanol"]) / (0.66 / mm["Ethanol"] + 0.34 / mm["Water"])    # the flash fake gives 0.66 mass fraction ethanol in the vapour
+        c["reported"] = [{"name": "vapor_ethanol_mole_fraction", "kind": "stream_mole_fraction", "target": "VAPOR", "compound": "Ethanol", "value": round(x, 6), "unit": "-", "anchor": "test", "pass_rel": 1e-5}]; c["scenarios"] = []
+        self.assertEqual(schema.validate(c), []); run = runner.run_case(c, transport_factory=FlashTransport, packages=[c["basis"]["package_in_paper"]], scenarios=["base"])
+        v = run["results"][0]["values"]["vapor_ethanol_mole_fraction"]; self.assertTrue(v["within_tol"], v); self.assertAlmostEqual(v["simulated"], x, places=6)
+
+    def test_mole_fraction_kind_converts_and_validates(self):
+        class Be:
+            def read_stream(self, sid): return {"mass_fractions": {"Methanol": 0.5, "Water": 0.5}}
+        r = {"kind": "stream_mole_fraction", "target": "X", "compound": "Methanol"}
+        v = runner._simulated(r, None, Be(), {}, {"Methanol": 32.042, "Water": 18.015}); self.assertAlmostEqual(v, (0.5 / 32.042) / (0.5 / 32.042 + 0.5 / 18.015), places=9)
+        with self.assertRaises(RuntimeError): runner._simulated(r, None, Be(), {}, None)
+        with self.assertRaises(RuntimeError): runner._simulated(r, None, Be(), {}, {"Methanol": 32.042})
+        c = schema.load(ASPEN["mch"]); c["basis"]["molar_mass_g_mol"].pop("Phenol"); self.assertTrue(any("mole-fraction reference needs" in x for x in schema.validate(c)))
 
 
 class Ledger(unittest.TestCase):

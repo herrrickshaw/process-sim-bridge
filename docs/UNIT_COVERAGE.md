@@ -36,6 +36,7 @@ Status key: **verified** = built through our casebook or tool path and run on th
 | Batch reactor | RBatch (secondary) | Batch reactor | BioReactor and others, no direct analogue seen | none | none | none |
 | Storage | none | Tank | Tank | none | server has it | none |
 | Filters, solids | Crystallizer, Filter, Cyclone and others (secondary, not verified) | Solids operations | Filter, SolidsSeparator, Crystallizer, Centrifuge | none | server has them | none |
+| Polymer attributes | Aspen Polymers (segment-based moments) | none in HYSYS core | not in the DWSIM server list (DWSIM has a polymer tutorial track, not driven) | none (a standalone calculator, `polymer_link`) | the moment arithmetic is verified against the printed numbers of Liu and Sharma chapter 1; no simulator runs polymers here | architecture doc section 24 |
 | Dynamics | Aspen Plus Dynamics (official: Aspen Assist paper) | HYSYS Dynamics | `dwsim_dynamics_*` tools (13) | none | not driven | DWSIM dynamics tutorials (not read) |
 
 ## 3. What the gap analysis says
