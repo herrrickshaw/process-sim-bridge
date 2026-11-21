@@ -1,0 +1,242 @@
+{
+ "sources": [
+  "hmb",
+  "vendor"
+ ],
+ "rows": 22,
+ "tolerances": {
+  "rel_tol": 0.005,
+  "temp_tol_C": 0.5,
+  "basis": "tool defaults unless the caller set them"
+ },
+ "findings": [
+  {
+   "code": "UNIT_UNREADABLE",
+   "item": "4",
+   "attribute": "P",
+   "detail": "vendor: pressure unit 'bar': gauge vs abs must be explicit (use barg/bara, kPag/kPaa, psig/psia) (value '1.8' 'bar'); left out of the comparison",
+   "values": []
+  },
+  {
+   "code": "MISSING_IN_SOURCE",
+   "item": "1",
+   "attribute": "P",
+   "detail": "not given by vendor",
+   "values": [
+    {
+     "source": "hmb",
+     "value": 301.325,
+     "unit": "kPa abs",
+     "raw": "301.325 kPaa"
+    }
+   ]
+  },
+  {
+   "code": "MISSING_IN_SOURCE",
+   "item": "1",
+   "attribute": "T",
+   "detail": "not given by vendor",
+   "values": [
+    {
+     "source": "hmb",
+     "value": 25.0,
+     "unit": "C",
+     "raw": "25.0 C"
+    }
+   ]
+  },
+  {
+   "code": "MISSING_IN_SOURCE",
+   "item": "1",
+   "attribute": "mass_flow",
+   "detail": "not given by vendor",
+   "values": [
+    {
+     "source": "hmb",
+     "value": 1000.0,
+     "unit": "kg/h",
+     "raw": "1000.0 kg/h"
+    }
+   ]
+  },
+  {
+   "code": "MISSING_IN_SOURCE",
+   "item": "2",
+   "attribute": "P",
+   "detail": "not given by vendor",
+   "values": [
+    {
+     "source": "hmb",
+     "value": 301.325,
+     "unit": "kPa abs",
+     "raw": "301.325 kPaa"
+    }
+   ]
+  },
+  {
+   "code": "MISSING_IN_SOURCE",
+   "item": "2",
+   "attribute": "T",
+   "detail": "not given by vendor",
+   "values": [
+    {
+     "source": "hmb",
+     "value": 35.0,
+     "unit": "C",
+     "raw": "35.0 C"
+    }
+   ]
+  },
+  {
+   "code": "MISSING_IN_SOURCE",
+   "item": "2",
+   "attribute": "mass_flow",
+   "detail": "not given by vendor",
+   "values": [
+    {
+     "source": "hmb",
+     "value": 500.0,
+     "unit": "kg/h",
+     "raw": "500.0 kg/h"
+    }
+   ]
+  },
+  {
+   "code": "MISSING_IN_SOURCE",
+   "item": "3",
+   "attribute": "mass_flow",
+   "detail": "not given by vendor",
+   "values": [
+    {
+     "source": "hmb",
+     "value": 1500.0,
+     "unit": "kg/h",
+     "raw": "1500.0 kg/h"
+    }
+   ]
+  },
+  {
+   "code": "MISSING_IN_SOURCE",
+   "item": "4",
+   "attribute": "P",
+   "detail": "not given by vendor",
+   "values": [
+    {
+     "source": "hmb",
+     "value": 281.325,
+     "unit": "kPa abs",
+     "raw": "281.325 kPaa"
+    }
+   ]
+  },
+  {
+   "code": "VALUE_MISMATCH",
+   "item": "4",
+   "attribute": "T",
+   "detail": "hmb and vendor differ by 5 C",
+   "values": [
+    {
+     "source": "hmb",
+     "value": 80.0,
+     "unit": "C",
+     "raw": "80.0 C"
+    },
+    {
+     "source": "vendor",
+     "value": 85.0,
+     "unit": "C",
+     "raw": "85 C"
+    }
+   ]
+  },
+  {
+   "code": "MISSING_IN_SOURCE",
+   "item": "E-100",
+   "attribute": "design_pressure",
+   "detail": "not given by hmb",
+   "values": [
+    {
+     "source": "vendor",
+     "value": 1101.325,
+     "unit": "kPa abs",
+     "raw": "10 barg"
+    }
+   ]
+  },
+  {
+   "code": "MISSING_IN_SOURCE",
+   "item": "E-100",
+   "attribute": "operating_pressure",
+   "detail": "not given by hmb",
+   "values": [
+    {
+     "source": "vendor",
+     "value": 1301.325,
+     "unit": "kPa abs",
+     "raw": "12 barg"
+    }
+   ]
+  },
+  {
+   "code": "TYPE_MISMATCH",
+   "item": "E-100",
+   "attribute": "type",
+   "detail": "hmb and vendor disagree",
+   "values": [
+    {
+     "source": "hmb",
+     "value": "heater",
+     "unit": "",
+     "raw": "heater"
+    },
+    {
+     "source": "vendor",
+     "value": "heatexchanger",
+     "unit": "",
+     "raw": "Heat exchanger"
+    }
+   ]
+  },
+  {
+   "code": "MISSING_IN_SOURCE",
+   "item": "MX-100",
+   "attribute": "type",
+   "detail": "not given by vendor",
+   "values": [
+    {
+     "source": "hmb",
+     "value": "mixer",
+     "unit": "",
+     "raw": "mixer"
+    }
+   ]
+  },
+  {
+   "code": "OPERATING_EXCEEDS_DESIGN",
+   "item": "E-100",
+   "attribute": "operating_pressure",
+   "detail": "operating_pressure 1301.33 kPa abs (vendor) is above design_pressure 1101.33 kPa abs (vendor)",
+   "values": [
+    {
+     "source": "vendor",
+     "value": 1301.325,
+     "unit": "kPa abs"
+    },
+    {
+     "source": "vendor",
+     "value": 1101.325,
+     "unit": "kPa abs"
+    }
+   ]
+  }
+ ],
+ "counts": {
+  "UNIT_UNREADABLE": 1,
+  "MISSING_IN_SOURCE": 11,
+  "VALUE_MISMATCH": 1,
+  "TYPE_MISMATCH": 1,
+  "OPERATING_EXCEEDS_DESIGN": 1
+ },
+ "agree": false,
+ "note": "reports disagreement only; which document is right, and any design margin, are engineering decisions"
+}

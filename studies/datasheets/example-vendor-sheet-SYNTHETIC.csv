@@ -1,0 +1,9 @@
+item,attribute,value,unit,note
+3,T,29.2,C,SYNTHETIC example row: agrees with the sample H&MB
+3,P,3.01325,bara,SYNTHETIC: 2.0 barg
+4,T,85,C,SYNTHETIC: 5 C above the H&MB
+4,mass_flow,1.5,t/h,SYNTHETIC
+4,P,1.8,bar,SYNTHETIC: gauge or absolute not stated
+E-100,type,Heat exchanger,,SYNTHETIC: the sample H&MB has no unit types
+E-100,operating_pressure,12,barg,SYNTHETIC
+E-100,design_pressure,10,barg,SYNTHETIC

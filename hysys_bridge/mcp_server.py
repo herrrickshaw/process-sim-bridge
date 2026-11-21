@@ -310,3 +310,5 @@ if __name__ == "__main__":
     main()
 from .casebook.tools import TOOLS as _CASEBOOK_TOOLS  # casebook_* tools: published reference cases run on DWSIM and compared
 TOOLS.update(_CASEBOOK_TOOLS)
+from .datasheet_check import TOOLS as _DATASHEET_TOOLS  # datasheet_check: attribute mismatches across P&ID, H&MB and vendor data sheets
+TOOLS.update(_DATASHEET_TOOLS)
