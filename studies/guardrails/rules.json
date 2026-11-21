@@ -1,0 +1,24 @@
+{
+ "about": "Registry of design-criteria guardrails. A rule is ACTIVE only if its text was read from a public source or its numbers are supplied by the user from a licensed copy with the clause and edition named. Nothing is filled in from memory. Guardrails report; they never change a simulation result or a published number.",
+ "rules": [
+  {"id": "osha-1910.119-d2iD-safe-limits", "standard": "OSHA 29 CFR 1910.119 (Process Safety Management)", "clause": "(d)(2)(i)(D) safe upper and lower limits for items such as temperatures, pressures, flows or compositions",
+   "text_status": "public-text-read", "source": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.119", "read": "2026-11-21", "check": "declared_limits",
+   "how": "the case declares safe limits per stream in design_limits.streams (T_C, P_kPa, mass_kg_h, with an anchor); every simulated stream is checked against them in every scenario and package. The regulation sets no numbers: the limits are the process's own."},
+  {"id": "osha-1910.119-d2iE-deviation-coverage", "standard": "OSHA 29 CFR 1910.119", "clause": "(d)(2)(i)(E) evaluation of the consequences of deviations; (f)(1)(ii) operating limits: consequences of deviation",
+   "text_status": "public-text-read", "source": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.119", "read": "2026-11-21", "check": "deviation_coverage",
+   "how": "a case that simulates scenarios (deviations) but declares no safe limits is reported as a coverage gap, because the deviations then have no consequence criterion."},
+  {"id": "osha-1910.119-d3iG-material-balance", "standard": "OSHA 29 CFR 1910.119", "clause": "(d)(3)(i)(G) material and energy balances for processes built after May 26, 1992",
+   "text_status": "public-text-read", "source": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.119", "read": "2026-11-21", "check": "mass_balance", "tolerance_rel": 0.001,
+   "tolerance_source": "tool default, not from the regulation (it sets no number)",
+   "how": "feed mass equals product mass in the simulated flowsheet."},
+  {"id": "osha-1910.106-a19-flammable-category", "standard": "OSHA 29 CFR 1910.106 (Flammable liquids)", "clause": "(a)(19)(i) to (v) categories 1 to 4 by flashpoint and boiling point; liquids heated for use to within 30 F (16.7 C) of their flashpoint are handled as the next more hazardous category",
+   "text_status": "public-text-read", "source": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.106", "read": "2026-11-21", "check": "flammable_category",
+   "how": "needs flashpoint and boiling point per compound in design_limits.compounds (from a safety data sheet, with an anchor); applies to streams that are at least 99.9 % mass one such compound, since a mixture's flashpoint is not available. Reports the category and whether the simulated temperature triggers the heated-near-flashpoint rule: an information status, not a violation."},
+  {"id": "api-520-521-relief-overpressure", "standard": "API Standard 520 / 521 (pressure-relieving systems), ASME BPVC overpressure", "clause": "allowable accumulation over the set pressure",
+   "text_status": "paywalled-not-read", "source": "not read: the standards are sold or behind a free-read-only login, which this tool does not bypass", "read": null, "check": "relief_overpressure",
+   "how": "ACTIVE ONLY WHEN the case supplies design_limits.relief.<unit> = {set_pressure_kPa, accumulation_pct, anchor naming the clause and edition} from a licensed copy; the stream pressure at that unit is then checked against set pressure x (1 + accumulation/100). No accumulation value is built in."},
+  {"id": "nfpa-30-flammable-liquids", "standard": "NFPA 30 and related NFPA codes", "clause": "not read",
+   "text_status": "paywalled-not-read", "source": "not read: free-access view requires a login, which this tool does not use", "read": null, "check": null,
+   "how": "registered so the gap is visible; no check is implemented until the user supplies clauses and numbers from a licensed copy."}
+ ]
+}

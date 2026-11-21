@@ -617,6 +617,80 @@ class Exchanger(unittest.TestCase):
         self.assertLess(abs(get(co)["hot_side_duty"]), abs(get(c)["hot_side_duty"]))        # same UA, parallel flow transfers less heat
 
 
+from hysys_bridge.casebook import guardrails as G
+
+
+class Guardrails(unittest.TestCase):
+    def case(self):
+        c = schema.load(HX["A"]); c["design_limits"] = {"streams": {"HOT_OUT": {"T_C": {"max": 90.0}, "P_kPa": {"min": 290.0, "max": 300.0}, "anchor": "test limits (synthetic)"}}}; return c
+    def sim(self, hot_out_T=86.1, mass=3600.0):
+        st = lambda T, P, m: {"T": T, "P": P, "mass": m, "mass_fractions": {"Water": 1.0}}
+        return {"HOT_IN": st(126.85, 304.0, 3600.0), "COLD_IN": st(26.85, 101.325, 7200.0), "HOT_OUT": st(hot_out_T, 294.0, mass), "COLD_OUT": st(47.4, 96.3, 7200.0)}
+    def status(self, rows, rule, obj=None): return [r["status"] for r in rows if r["rule"] == rule and (obj is None or r["object"] == obj)]
+
+    def test_only_read_or_supplied_rules_are_active_and_paywalled_ones_say_so(self):
+        R = G.rules()
+        for r in R.values():
+            if r["text_status"] == "public-text-read": self.assertTrue(r["read"] and r["source"].startswith("https://www.osha.gov/"), r["id"])
+            else: self.assertEqual(r["text_status"], "paywalled-not-read"); self.assertIsNone(r["read"])
+        rows = G.evaluate(self.case(), self.sim(), "base")
+        self.assertEqual(self.status(rows, "api-520-521-relief-overpressure"), ["not-evaluated"])      # nothing built in: without supplied numbers the rule does not evaluate
+
+    def test_declared_limits_pass_and_violate(self):
+        ok = G.evaluate(self.case(), self.sim(86.1), "base"); self.assertEqual(self.status(ok, "osha-1910.119-d2iD-safe-limits", "HOT_OUT"), ["pass", "pass"])
+        bad = G.evaluate(self.case(), self.sim(91.0), "base"); self.assertEqual(self.status(bad, "osha-1910.119-d2iD-safe-limits", "HOT_OUT"), ["violation", "pass"])
+        low = self.sim(); low["HOT_OUT"]["P"] = 289.0; self.assertEqual(self.status(G.evaluate(self.case(), low, "base"), "osha-1910.119-d2iD-safe-limits", "HOT_OUT"), ["pass", "violation"])
+
+    def test_no_limits_is_reported_not_passed(self):
+        c = schema.load(HX["A"]); rows = G.evaluate(c, self.sim(), "co-current")
+        self.assertEqual(self.status(rows, "osha-1910.119-d2iD-safe-limits"), ["not-evaluated"]); self.assertEqual(self.status(rows, "osha-1910.119-d2iE-deviation-coverage"), ["not-evaluated"])
+        self.assertEqual(self.status(G.evaluate(c, self.sim(), "base"), "osha-1910.119-d2iE-deviation-coverage"), [])        # the base case is not a deviation
+
+    def test_material_balance(self):
+        self.assertEqual(self.status(G.evaluate(self.case(), self.sim(), "base"), "osha-1910.119-d3iG-material-balance"), ["pass"])
+        for dm, want in ((7.0, "pass"), (7200.0 * 0.0005, "pass"), (7200.0 * 0.002, "violation"), (-7200.0 * 0.002, "violation"), (200.0, "violation")):        # 0.1 % is the tool's tolerance, both signs
+            s = self.sim(); s["COLD_OUT"]["mass"] += dm; self.assertEqual(self.status(G.evaluate(self.case(), s, "base"), "osha-1910.119-d3iG-material-balance"), [want], dm)
+
+    def test_flammable_categories_follow_the_osha_boundaries(self):
+        cases = [((22.9, 35.0), "1"), ((22.9, 35.1), "2"), ((23.0, 100), "3"), ((60.0, 100), "3"), ((60.1, 100), "4"), ((93.0, 200), "4"), ((93.1, 200), None)]
+        for (fp, bp), want in cases: self.assertEqual(G.category(fp, bp)[0], want, (fp, bp))
+
+    def test_heated_near_flashpoint_rule(self):
+        c = self.case(); c["design_limits"]["compounds"] = {"Water": {"flash_point_C": 100.0, "boiling_point_C": 150.0, "anchor": "synthetic"}}
+        near = self.sim(); near["HOT_OUT"]["T"] = 83.4; far = self.sim(); far["HOT_OUT"]["T"] = 83.2
+        t = lambda sim: next(r["detail"] for r in G.evaluate(c, sim, "base") if r["rule"] == "osha-1910.106-a19-flammable-category" and r["object"] == "HOT_OUT")
+        self.assertIn("is within 30 F", t(near)); self.assertIn("more than 30 F below", t(far))        # 100 C - 16.7 C = 83.3 C
+
+    def test_registered_but_unimplemented_rules_never_produce_rows(self):
+        c = self.case(); c["design_limits"]["relief"] = {"X": {"set_pressure_kPa": 280.0, "accumulation_pct": 10.0, "stream": "HOT_OUT", "anchor": "synthetic"}}
+        self.assertEqual([r for r in G.evaluate(c, self.sim(), "base") if r["rule"] == "nfpa-30-flammable-liquids"], [])
+
+    def test_relief_uses_only_supplied_numbers(self):
+        c = self.case(); c["design_limits"]["relief"] = {"X": {"set_pressure_kPa": 280.0, "accumulation_pct": 10.0, "stream": "HOT_OUT", "anchor": "synthetic: clause and edition from a licensed copy go here"}}
+        self.assertEqual(self.status(G.evaluate(c, self.sim(), "base"), "api-520-521-relief-overpressure"), ["pass"])         # 294 <= 280 x 1.10 = 308
+        c["design_limits"]["relief"]["X"]["accumulation_pct"] = 4.0; self.assertEqual(self.status(G.evaluate(c, self.sim(), "base"), "api-520-521-relief-overpressure"), ["violation"])   # 294 > 291.2
+
+    def test_design_limits_validation(self):
+        mk = lambda f: (lambda c: (c.update(design_limits={}), f(c["design_limits"])))
+        base = lambda: {"streams": {"HOT_OUT": {"T_C": {"max": 90.0}, "anchor": "x"}}}
+        muts = [("not a stream", lambda d: d["streams"].update(NOPE={"T_C": {"max": 1}, "anchor": "x"})), ("needs an anchor", lambda d: d["streams"]["HOT_OUT"].pop("anchor")),
+                ("min is above max", lambda d: d["streams"]["HOT_OUT"].update(T_C={"min": 5, "max": 1})), ("needs at least one of", lambda d: d["streams"]["HOT_OUT"].pop("T_C")),
+                ("numeric flash_point_C", lambda d: d.update(compounds={"Water": {"anchor": "x"}})), ("not in basis.compounds", lambda d: d.update(compounds={"Gold": {"flash_point_C": 1, "boiling_point_C": 2, "anchor": "x"}})),
+                ("set_pressure_kPa > 0", lambda d: d.update(relief={"X": {"set_pressure_kPa": 0, "accumulation_pct": 10, "stream": "HOT_OUT", "anchor": "x"}})),
+                ("must be the stream whose pressure", lambda d: d.update(relief={"X": {"set_pressure_kPa": 5, "accumulation_pct": 10, "stream": "NOPE", "anchor": "x"}}))]
+        for needle, f in muts:
+            c = schema.load(HX["A"]); d = base(); f(d); c["design_limits"] = d; self.assertTrue(any(needle in x for x in schema.validate(c)), needle)
+        c = schema.load(HX["A"]); c["design_limits"] = base(); self.assertEqual(schema.validate(c), [])
+
+    def test_runner_attaches_guardrails_without_touching_results(self):
+        c = schema.load(CASE); c["design_limits"] = {"streams": {c["streams"][0]["id"]: {"T_C": {"max": -1000.0}, "anchor": "synthetic impossible limit"}}}
+        run = runner.run_case(c, transport_factory=FakeTransport, packages=[c["basis"]["package_in_paper"]], scenarios=["base"]); o = run["results"][0]
+        self.assertTrue(any(g["status"] == "violation" for g in o["guardrails"]))
+        plain = runner.run_case(schema.load(CASE), transport_factory=FakeTransport, packages=[c["basis"]["package_in_paper"]], scenarios=["base"])["results"][0]
+        self.assertEqual(o["values"], plain["values"])                                                    # a guardrail reports; it never alters a comparison
+        rows = runner.ledger_rows(run); self.assertTrue(any(":violation:" in g for g in rows[0]["guardrails"]))
+
+
 class Ledger(unittest.TestCase):
     def test_append_and_read_are_additive(self):
         with tempfile.TemporaryDirectory() as d:

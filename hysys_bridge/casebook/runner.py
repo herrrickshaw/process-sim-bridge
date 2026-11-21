@@ -3,7 +3,7 @@ from __future__ import annotations
 import os, shlex
 from .. import hysys_writer
 from ..dwsim.backend import DwsimBackend, StdioTransport
-from . import diagnose, schema
+from . import diagnose, guardrails, schema
 
 
 def default_transport():
@@ -62,7 +62,8 @@ def run_case(case: dict, transport_factory=None, packages: list[str] | None = No
                 if not solved: out.append({"scenario": scen, "package": package, "solved": False, "why": be.last_solve, "findings": found, "next_step": diagnose.next_step(found)}); continue
                 cache, vals = {}, {}
                 for r in sc_case["reported"]: vals[r["name"]] = compare_item(r, _simulated(r, fs, be, cache), case["tolerance"]["pass_rel"])
-                out.append({"scenario": scen, "package": package, "solved": True, "values": vals, "spec_mismatches": be.check_solution(), "findings": found})
+                sim = {sid: cache.setdefault(sid, be.read_stream(sid)) for sid in fs.streams}
+                out.append({"scenario": scen, "package": package, "solved": True, "values": vals, "spec_mismatches": be.check_solution(), "findings": found, "guardrails": guardrails.evaluate(sc_case, sim, scen)})
             finally:
                 t.close()
     spread = {}                                                           # across packages, per scenario and reported value
@@ -90,7 +91,8 @@ def ledger_rows(run: dict) -> list[dict]:
     rows = []
     for o in run["results"]:
         row = {"case": run["case"], "case_hash": run["case_hash"], "backend": "dwsim-mcp", "scenario": o["scenario"], "package": o["package"], "solved": o["solved"],
-               "findings": [f"{f['code']}:{f['severity']}:{f['object']}" for f in o["findings"]]}
+               "findings": [f"{f['code']}:{f['severity']}:{f['object']}" for f in o["findings"]],
+               "guardrails": [f"{g['rule']}:{g['status']}:{g['object']}" for g in o.get("guardrails", []) if g["status"] != "pass"]}
         row.update({"values": o["values"], "spec_mismatches": o["spec_mismatches"]} if o["solved"] else {"why": o["why"], "next_step": o["next_step"]})
         rows.append(row)
     return rows

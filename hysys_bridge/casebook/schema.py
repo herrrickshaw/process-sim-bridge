@@ -183,6 +183,8 @@ def validate(case: dict) -> list[str]:
         else:
             try: sub = apply_scenario(case, sc["id"]); p += [f"{pa}: {x}" for x in validate({**sub, "scenarios": [], "reproduce": None}) if x not in base_problems]
             except (KeyError, IndexError, TypeError) as e: p.append(f"{pa}: an override path does not exist ({e!r})")
+    from . import guardrails
+    p += guardrails.validate_limits(case)
     rp = case.get("reproduce")
     if rp is not None and not (isinstance(rp.get("expected"), dict) and set(rp["expected"]) <= set(b.get("packages", [])) and isinstance(rp.get("rel_tol"), (int, float)) and rp.get("source")):
         p.append("reproduce needs expected {package: value} for listed packages, rel_tol and source (where the earlier numbers came from)")
