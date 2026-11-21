@@ -40,7 +40,7 @@ Status for this repository: **have** (built and tested), **partial**, **none**. 
 | Document intelligence: cross-document graph, revision tracking, change propagation | Yes: the contextual graph, version tracking, automatic downstream impact | Change management as a guided workflow, not a document graph | **None.** No document store, no revision history, no impact tracing |
 | Data sheet cross-check (design against EPC against vendor) | Yes | No | **None** as a feature. The P&ID against H&MB conflict report is the nearest piece |
 | Natural-language engineering Q&A and agentic workflows | Yes ("Junior", grounded in the graph, cites the source) | AI inside records and forms (summaries, patterns, control suggestions) | **Partial.** The MCP server lets an LLM client call 46 tools, so questions about a loaded flowsheet can be answered and acted on, but there is no document corpus, no retrieval over drawings and no source citations |
-| HAZOP and root cause analysis | Yes: HAZOP reports digitized into the graph, anomaly to origin tracing, safety barrier status | Digital bow-tie, critical control management with automatic control verification records | **None as a tool.** Literature surveys exist (`HAZOP_WITH_SIMULATION_LITERATURE.md`); a guide word plus parameter maps onto a casebook scenario override, but no deviation runner, worksheet or consequence criterion is built |
+| HAZOP and root cause analysis | Yes: HAZOP reports digitized into the graph, anomaly to origin tracing, safety barrier status | Digital bow-tie, critical control management with automatic control verification records | **Partial (added after this comparison was first written).** A deviation runner exists (`casebook_hazop`): sized guide-word deviations on feed streams, solved on DWSIM, consequences from the simulation and the declared limits, a worksheet with the team's causes and safeguards. No cause suggestion, no rules store, no P&ID-derived nodes, no SIL/LOPA, no bow-tie, no root cause analysis on live data |
 | Predictive operations: alarm intelligence, condition-based maintenance, soft sensors, optimization recommendations | Yes ("Brains", with historian and alarm data) | Analytics and trends on EHS records | **None for live data.** Screening models only: refinery yield balance, boiler and utilities balance, steam demand, relief sizing; no historian connection |
 | EHS management: incidents, actions, audits, inspections, registers (chemicals, asbestos, equipment), training, mobile app | No | Yes, 50+ modules, configurable, mobile app, integrations, custom modules | **None.** Out of scope for this repository |
 | Governance: users, permissions, audit trail | Not stated on the pages read | Yes (permissions, audit trail, "human reviewed") | **Partial.** A ledger of runs with case hashes, and sign-off gates, but no users or permissions |
@@ -50,15 +50,15 @@ Status for this repository: **have** (built and tested), **partial**, **none**. 
 1. No connected document model (graph, revisions, change impact) or document Q&A: the platform layer Drishya sells.
 2. Diagram understanding is draft quality: an LLM topology draft with reconcile rules, no symbol model and no isometrics.
 3. The simulator writers are tested live only on DWSIM; HYSYS and Aspen paths are unproven here.
-4. No HAZOP execution, no operations data, no EHS workflows, no interface or user management.
+4. HAZOP: a deviation runner now exists, but no cause or safeguard knowledge base, no SIL/LOPA or bow-tie, no operations data, no EHS workflows, no interface or user management.
 
 ## Where it differs in a way that matters
 - It runs on free and open parts (DWSIM, CoolProp) and records, per case, how the reference was obtained and what disagrees.
 - Claims are limited to what a test or a live run supports; the vendor pages give percentages without method.
 - Every simulator write is gated and read back; extraction output is always marked for engineer sign-off.
 
-## Candidate next builds, in order of fit (not started)
-1. **HAZOP deviation runner**: guide word and parameter generate casebook scenarios, run them on DWSIM, and check each result against declared safe limits (the guardrail rule for 1910.119(d)(2)(i)(D)). It is the closest match to what ProU, Drishya and the literature describe, and reuses the casebook, guardrails and ledger.
+## Candidate next builds, in order of fit
+1. ~~HAZOP deviation runner~~ built (architecture doc section 27).
 2. **HAZOP and safeguard rules as data**, so that the deviation runner has a rules store (the part of ProU's "knowledge and rules engine" that this repository can match without a user interface).
 3. **Data-sheet attribute mismatch check**: compare equipment attributes across the P&ID, the H&MB and a vendor sheet using the existing merge and reconcile code.
 4. **Revision tracking and change impact** for the flowsheet and cases (a small step toward the graph).

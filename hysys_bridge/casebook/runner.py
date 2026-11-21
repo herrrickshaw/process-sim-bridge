@@ -48,6 +48,19 @@ def compare_item(r: dict, simulated: float, default_pass_rel: float) -> dict:
     return compare(r["value"], simulated, r.get("pass_rel", default_pass_rel))
 
 
+def solve_case(case: dict, package: str, transport_factory=None) -> dict:
+    """Build and solve one case (as given, no scenario) in one package and return every stream's simulated state, for callers that need the whole flowsheet
+    (the HAZOP runner). No comparison with published values is made."""
+    cap = schema.capability(case)
+    if not cap["buildable"]: return {"ran": False, "reason": f"unit types not verified on the backend: {cap['unverified_unit_types']}"}
+    fs = schema.to_flowsheet(case, package); t = (transport_factory or default_transport)()
+    try:
+        be = DwsimBackend(t); hysys_writer.write(fs, be); solved = be.solve(); found = diagnose.classify(be.last_findings)
+        if not solved: return {"ran": True, "solved": False, "why": be.last_solve, "findings": found}
+        return {"ran": True, "solved": True, "sim": {sid: be.read_stream(sid) for sid in fs.streams}, "findings": found, "spec_mismatches": be.check_solution()}
+    finally: t.close()
+
+
 def run_case(case: dict, transport_factory=None, packages: list[str] | None = None, scenarios: list[str] | None = None) -> dict:
     cap = schema.capability(case)
     if not cap["buildable"]: return {"case": case["id"], "ran": False, "reason": f"unit types not verified on the backend: {cap['unverified_unit_types']}"}

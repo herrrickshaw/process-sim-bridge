@@ -2,7 +2,8 @@
 the ledger is only written with confirm=true; no simulator case is saved."""
 from __future__ import annotations
 import glob, os, re
-from . import schema, runner, ledger
+import json
+from . import schema, runner, ledger, hazop
 
 DEFAULT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases")
 
@@ -40,10 +41,34 @@ def t_run(a):
     return run
 
 
+HAZOP_DEFAULT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "hazop")
+
+
+def _hazop_dir(): return os.environ.get("HAZOP_DIR", HAZOP_DEFAULT_DIR)
+
+
+def load_spec(spec_id):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", str(spec_id)): raise ValueError("spec_id must be lowercase letters, digits and hyphens")
+    path = os.path.join(_hazop_dir(), spec_id + ".json")
+    if not os.path.isfile(path): raise KeyError(f"no HAZOP study {spec_id!r} in the study directory")
+    with open(path) as f: return json.load(f)
+
+
+def t_hazop(a):
+    spec = load_spec(a["spec_id"]); case = _load(spec["case"]); probs = schema.validate(case)
+    if probs: return {"ran": False, "reason": "case is not valid", "problems": probs}
+    if a.get("packages"): spec = {**spec, "packages": a["packages"]}
+    sp = hazop.validate_spec(spec, case)
+    if sp: return {"ran": False, "reason": "the study spec is not valid", "problems": sp}
+    ws = hazop.run_study(spec, case); return {"ran": True, "worksheet": ws, "markdown": hazop.render_markdown(ws)}
+
+
 _s = lambda props, req=(): {"type": "object", "properties": props, "required": list(req)}
 TOOLS = {
     "casebook_list": (t_list, "List the reference cases (from published studies) in the operator's case directory: status, validity, and whether every unit type is verified on the DWSIM backend.", _s({})),
     "casebook_validate": (t_validate, "Check one case record: every number has a source anchor or an assumed reason, pressure and composition bases are stated, reconstructed values say how they were checked.", _s({"case_id": {"type": "string"}}, ["case_id"])),
     "casebook_run": (t_run, "Run a case on DWSIM (needs DWSIM_MCP_CMD) for each listed property package and scenario and compare with the published values; reports error per package and the spread between packages. Nothing is tuned. confirm=true appends the rows to the ledger.",
                      _s({"case_id": {"type": "string"}, "packages": {"type": "array", "items": {"type": "string"}}, "scenarios": {"type": "array", "items": {"type": "string"}}, "confirm": {"type": "boolean"}}, ["case_id"])),
+    "casebook_hazop": (t_hazop, "Run a HAZOP deviation study (a spec in the operator's study directory) on its casebook case: each guide word plus parameter plus size is applied to a feed stream, solved on DWSIM (needs DWSIM_MCP_CMD), and the consequences are read from the simulation and the guardrails (declared safe limits, material balance). Returns a worksheet; causes and safeguards are the team's, no severity or recommendation is assigned, steady-state only. Nothing is written.",
+                       _s({"spec_id": {"type": "string"}, "packages": {"type": "array", "items": {"type": "string"}}}, ["spec_id"])),
 }

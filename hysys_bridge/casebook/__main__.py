@@ -1,7 +1,7 @@
-"""CLI: python3 -m hysys_bridge.casebook validate <dir> | run <case-id> [--reproduce] [--no-ledger] | ledger <case-id>   (DWSIM_MCP_CMD for run; CASEBOOK_DIR for the case directory)"""
+"""CLI: python3 -m hysys_bridge.casebook validate <dir> | run <case-id> [--reproduce] [--no-ledger] | hazop <study-id|path.json> [--out worksheet.md] | ledger <case-id>   (DWSIM_MCP_CMD for run; CASEBOOK_DIR for the case directory)"""
 from __future__ import annotations
 import glob, os, sys
-from . import guardrails, ledger, runner, schema, tools
+from . import guardrails, hazop, ledger, runner, schema, tools
 
 
 def main(argv):
@@ -31,6 +31,13 @@ def main(argv):
         if "--reproduce" in argv:
             r = runner.reproduce(case, run); print(f"{'REPRODUCED' if r['matched'] == r['of'] else 'NOT REPRODUCED'} base {r['matched']}/{r['of']} SOLVED {r['solved']}/{r['total']}")
             return 0 if r["matched"] == r["of"] and r["solved"] == r["total"] else 1
+        return 0
+    if cmd == "hazop":
+        spec = tools.load_spec(argv[1]) if not argv[1].endswith(".json") else __import__("json").load(open(argv[1])); case = tools._load(spec["case"]); probs = schema.validate(case) or hazop.validate_spec(spec, case)
+        if probs: print("\n".join(probs)); return 1
+        ws = hazop.run_study(spec, case); md = hazop.render_markdown(ws)
+        if "--out" in argv: open(argv[argv.index("--out") + 1], "w").write(md + "\n"); print(f"worksheet written to {argv[argv.index('--out') + 1]}")
+        else: print(md)
         return 0
     if cmd == "ledger":
         case = tools._load(argv[1]); h = schema.case_hash(case); rows = [r for r in ledger.read() if r["case"] == case["id"] and r["case_hash"] == h]
