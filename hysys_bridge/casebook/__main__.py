@@ -1,7 +1,7 @@
-"""CLI: python3 -m hysys_bridge.casebook validate <dir> | run <case-id> [--reproduce] [--no-ledger] | hazop <study-id|path.json> [--out worksheet.md] | hazop-rules [parameter guide_word] | ledger <case-id>   (DWSIM_MCP_CMD for run; CASEBOOK_DIR for the case directory)"""
+"""CLI: python3 -m hysys_bridge.casebook validate <dir> | run <case-id> [--reproduce] [--no-ledger] | hazop <study-id|path.json> [--out worksheet.md] | hazop-rules [parameter guide_word] | hazop-nodes <case-id|flowsheet.json> [--case CASE] [--sizes sizes.json] [--study-id id] [--out spec.json] | ledger <case-id>   (DWSIM_MCP_CMD for run; CASEBOOK_DIR for the case directory)"""
 from __future__ import annotations
 import glob, os, sys
-from . import guardrails, hazop, ledger, runner, schema, tools
+from . import guardrails, hazop, hazop_nodes, ledger, runner, schema, tools
 
 
 def main(argv):
@@ -38,6 +38,23 @@ def main(argv):
         ws = hazop.run_study(spec, case); md = hazop.render_markdown(ws)
         if "--out" in argv: open(argv[argv.index("--out") + 1], "w").write(md + "\n"); print(f"worksheet written to {argv[argv.index('--out') + 1]}")
         else: print(md)
+        return 0
+    if cmd == "hazop-nodes":
+        import json, copy
+        flag = lambda k: argv[argv.index(k) + 1] if k in argv else None
+        sizes = json.load(open(flag("--sizes"))) if flag("--sizes") else None; case = tools._load(flag("--case")) if flag("--case") else None; issues = None
+        if argv[1].endswith(".json"):
+            from ..ir import Flowsheet
+            from .. import pid_reconcile
+            fs = Flowsheet.from_json(argv[1]); issues = [str(i) for i in pid_reconcile.reconcile(copy.deepcopy(fs), fix=False)[0]]; g = hazop_nodes.graph_from_flowsheet(fs)
+        else:
+            case = tools._load(argv[1]); g = hazop_nodes.graph_from_case(case)
+        spec = hazop_nodes.derive(g, case, flag("--study-id") or "draft-study", sizes, issues); d = spec["derivation"]
+        text = json.dumps(spec, indent=1)
+        if flag("--out"): open(flag("--out"), "w").write(text + "\n"); print(f"draft written to {flag('--out')}")
+        print(f"{len(spec['nodes'])} node(s); complete: {d['complete']}; missing sizes: {len(d['missing_sizes'])}; mismatches: {len(d['mismatches'])}")
+        for w in d["warnings"] + d["mismatches"] + d["errors"]: print("  -", w)
+        if not flag("--out"): print(text)
         return 0
     if cmd == "hazop-rules":
         out = tools.t_hazop_rules({"parameter": argv[1], "guide_word": argv[2]} if len(argv) > 2 else {}); print(__import__("json").dumps(out, indent=1)); return 0 if out.get("valid") else 1

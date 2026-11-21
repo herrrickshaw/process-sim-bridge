@@ -1,0 +1,1 @@
+{"reason": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure", "flow": {"MORE": {"relative": 0.2}, "LESS": {"relative": 0.2}}, "temperature": {"MORE": {"absolute": 10}, "LESS": {"absolute": 10}}, "pressure": {"MORE": {"relative": 0.1}, "LESS": {"relative": 0.1}}}

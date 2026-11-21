@@ -2,8 +2,8 @@
 the ledger is only written with confirm=true; no simulator case is saved."""
 from __future__ import annotations
 import glob, os, re
-import json
-from . import schema, runner, ledger, hazop, hazop_rules
+import copy, json
+from . import schema, runner, ledger, hazop, hazop_rules, hazop_nodes
 
 DEFAULT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases")
 
@@ -71,6 +71,19 @@ def t_hazop_rules(a):
     return {"valid": True, "suggestions": hazop_rules.suggest(st, a["parameter"], a["guide_word"], a.get("upstream_equipment")), "sources": st["sources"], "status": "candidates for the study team, none reviewed"}
 
 
+def t_hazop_nodes(a):
+    """Draft HAZOP nodes from a casebook case's topology, or from a loaded flowsheet session (a P&ID extraction) with the casebook case that supplies the values. Returns the draft spec; writes nothing."""
+    sizes, sid, issues, case = a.get("sizes"), a.get("study_id", "draft-study"), None, (_load(a["case_id"]) if a.get("case_id") else None)
+    if "session" in a:
+        from .. import mcp_server, pid_reconcile
+        fs = mcp_server._fs(a["session"]); issues = [str(i) for i in pid_reconcile.reconcile(copy.deepcopy(fs), fix=False)[0]]; g = hazop_nodes.graph_from_flowsheet(fs)
+    else:
+        if case is None: raise ValueError("pass case_id (a casebook case) or session (a loaded flowsheet)")
+        g = hazop_nodes.graph_from_case(case)
+    spec = hazop_nodes.derive(g, case, sid, sizes, issues)
+    return {"spec": spec, "complete": spec["derivation"]["complete"], "next": "supply sizes with their reason, fix any mismatches, then save the spec in the study directory and run casebook_hazop"}
+
+
 _s = lambda props, req=(): {"type": "object", "properties": props, "required": list(req)}
 TOOLS = {
     "casebook_list": (t_list, "List the reference cases (from published studies) in the operator's case directory: status, validity, and whether every unit type is verified on the DWSIM backend.", _s({})),
@@ -81,4 +94,6 @@ TOOLS = {
                        _s({"spec_id": {"type": "string"}, "packages": {"type": "array", "items": {"type": "string"}}}, ["spec_id"])),
     "casebook_hazop_rules": (t_hazop_rules, "Look up the HAZOP cause and safeguard rules store: candidate causes for a guide word and parameter (optionally limited to the equipment you say is upstream), safeguard types, worked examples from the cited sources, and method notes. Every entry names the source it came from and how that source was read; all are unreviewed candidates for the study team. With no parameter, returns the sources and counts. Nothing is written.",
                               _s({"parameter": {"type": "string"}, "guide_word": {"type": "string"}, "upstream_equipment": {"type": "array", "items": {"type": "string"}}})),
+    "casebook_hazop_nodes": (t_hazop_nodes, "Derive draft HAZOP study nodes from a flowsheet topology: for each feed stream a node (the feed plus the pumps, compressors and valves on its line), the equipment tags for the rules store, which units each feed reaches (recycle loops marked), the standard deviation set, and watch values on product streams. Sources: a casebook case (case_id) or a loaded flowsheet session such as a P&ID extraction (session, plus the case_id that supplies the values). Never invents a size: sized deviations come out without one until you pass a sizes table that carries its reason. Warns when the topology is an unreviewed extraction, and reports reconcile findings and tag mismatches with the case. Writes nothing.",
+                          _s({"case_id": {"type": "string"}, "session": {"type": "string"}, "study_id": {"type": "string"}, "sizes": {"type": "object"}})),
 }
