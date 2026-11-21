@@ -1,0 +1,213 @@
+{
+ "about": "Printed result tables of Liu and Sharma, Integrated Process Modeling, Advanced Control and Data Analytics for Optimizing Polyolefin Manufacturing (Wiley 2023), as posted on engrXiv under CC BY 4.0, transcribed from the PDF text layer. Recorded as answer keys for a polymer-capable backend (none here) and checked for internal arithmetic only. Attribution: Liu, Y. A. and Sharma, N.",
+ "sources": {
+  "ch4": {
+   "chapter": "Chapter 4, Free Radical Polymerizations: LDPE and EVA",
+   "doi": "10.31224/4401",
+   "landing": "https://engrxiv.org/preprint/view/4401",
+   "licence": "Creative Commons Attribution 4.0 International (engrXiv landing page)",
+   "fetched": "2026-11-21, one request each, PDF text extracted with fetch_source.py"
+  },
+  "ch5": {
+   "chapter": "Chapter 5, Ziegler-Natta Polymerization: HDPE, PP, LLDPE and EPDM",
+   "doi": "10.31224/4403",
+   "landing": "https://engrxiv.org/preprint/view/4403",
+   "licence": "Creative Commons Attribution 4.0 International (engrXiv landing page)",
+   "fetched": "2026-11-21, one request each, PDF text extracted with fetch_source.py"
+  },
+  "ch6": {
+   "chapter": "Chapter 6, Free Radical and Ionic Polymerizations: PS and SBS Rubber",
+   "doi": "10.31224/4402",
+   "landing": "https://engrxiv.org/preprint/view/4402",
+   "licence": "Creative Commons Attribution 4.0 International (engrXiv landing page)",
+   "fetched": "2026-11-21, one request each, PDF text extracted with fetch_source.py"
+  }
+ },
+ "error_tables": [
+  {
+   "id": "T4.7",
+   "source": "ch4",
+   "what": "LDPE tubular/autoclave base case against production targets; error = (target - simulation)/target",
+   "rows": [
+    [
+     "LDPE kg/h",
+     8500,
+     8495.63,
+     "0.05"
+    ],
+    [
+     "MWN",
+     10500,
+     10846.6,
+     "3.3"
+    ],
+    [
+     "MWW",
+     191800,
+     191899,
+     "0.05"
+    ]
+   ]
+  },
+  {
+   "id": "T4.12",
+   "source": "ch4",
+   "what": "EVA tubular reactor against production targets",
+   "rows": [
+    [
+     "EVA copolymer kg/h",
+     39000,
+     38949,
+     "0.131"
+    ],
+    [
+     "MWN",
+     49500,
+     49606.2,
+     "0.2"
+    ],
+    [
+     "MWW",
+     420000,
+     420357,
+     "0.0085"
+    ]
+   ]
+  },
+  {
+   "id": "T6.11",
+   "source": "ch6",
+   "what": "SBS semi-batch against plant data",
+   "rows": [
+    [
+     "MWW g/mol",
+     108800,
+     116461,
+     "6.96"
+    ],
+    [
+     "MWN g/mol",
+     104310,
+     99507,
+     "4.60"
+    ],
+    [
+     "SBS kg/min",
+     910,
+     900.95,
+     "0.99"
+    ]
+   ]
+  }
+ ],
+ "pdi_tables": [
+  {
+   "id": "T5.13 D201OUT",
+   "source": "ch5",
+   "MWN": 7769.51,
+   "MWW": 110123,
+   "PDI": "14.1737"
+  },
+  {
+   "id": "T5.13 D221OUT",
+   "source": "ch5",
+   "MWN": 15038.7,
+   "MWW": 80781.1,
+   "PDI": "53.7154"
+  },
+  {
+   "id": "T5.15 Slurry",
+   "source": "ch5",
+   "MWN": 25550,
+   "MWW": 214919,
+   "PDI": "8.41171"
+  },
+  {
+   "id": "T5.15 SL2",
+   "source": "ch5",
+   "MWN": 51106.9,
+   "MWW": 291821,
+   "PDI": "57.1002"
+  },
+  {
+   "id": "T5.20 open loop",
+   "source": "ch5",
+   "MWN": 58861.4,
+   "MWW": 322183,
+   "PDI": "5.4736"
+  },
+  {
+   "id": "T5.20 closed loop",
+   "source": "ch5",
+   "MWN": 69990.8,
+   "MWW": 415064,
+   "PDI": "5.93"
+  }
+ ],
+ "table_5_13": {
+  "source": "ch5",
+  "what": "open-loop two-reactor slurry HDPE, kg/h (selected components)",
+  "columns": [
+   "Feed",
+   "D201OUT",
+   "Slurry",
+   "Feed2",
+   "D221OUT"
+  ],
+  "total": [
+   14646.3,
+   14646.3,
+   14646.3,
+   16308.8,
+   30927.6
+  ],
+  "C2H4": [
+   5589.15,
+   14.6007,
+   12.2919,
+   5414.68,
+   35.982
+  ],
+  "C4H8": [
+   4.53,
+   4.53,
+   4.32593,
+   101.945,
+   106.271
+  ],
+  "HDPE": [
+   0,
+   5374.93,
+   5374.93,
+   0,
+   10574.9
+  ],
+  "LP": [
+   267.862,
+   470.17,
+   470.17,
+   444.752,
+   1006.66
+  ],
+  "HX": [
+   8776.24,
+   8776.24,
+   8752.46,
+   10320.6,
+   19073
+  ],
+  "ethylene_conversion_printed": "10574.9/(5589.15 + 5414.68) = 96.10 %"
+ },
+ "table_5_15": {
+  "source": "ch5",
+  "what": "closed-loop slurry HDPE",
+  "ethylene_conversion_printed": "10178.8/(5089.14 + 5414.68) = 92.5 %",
+  "feed_C2H4_in_table": 5589.14,
+  "feed2_C2H4_in_table": 5414.68,
+  "HDPE_SL2": 10178.8
+ },
+ "table_5_20": {
+  "source": "ch5",
+  "what": "gas-phase PP, stirred bed; propene feed 29286.83 kg/h (first column, 'total monomer feed'), R8O open loop propene 5292.11 and PP 28996.8, closed loop propene 5487.4 and PP 29210.7"
+ }
+}
