@@ -312,3 +312,7 @@ from .casebook.tools import TOOLS as _CASEBOOK_TOOLS  # casebook_* tools: publis
 TOOLS.update(_CASEBOOK_TOOLS)
 from .datasheet_check import TOOLS as _DATASHEET_TOOLS  # datasheet_check: attribute mismatches across P&ID, H&MB and vendor data sheets
 TOOLS.update(_DATASHEET_TOOLS)
+from .lng_link import TOOLS as _LNG_TOOLS  # lng_cost_*: LNG value-chain cost estimate (lng-cost repo), capacity from a solved stream
+TOOLS.update(_LNG_TOOLS)
+from .ppac_link import TOOLS as _PPAC_TOOLS  # ppac_*: PPAC Ready Reckoner tables as reference data (ppac-ready-reckoner-data repo)
+TOOLS.update(_PPAC_TOOLS)
