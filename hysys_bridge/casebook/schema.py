@@ -15,6 +15,8 @@ SPEC_BY_OUTLET = {"heater", "cooler", "pump", "valve", "compressor"}      # unit
 KINDS = {"unit_duty": "kJ/h", "stream_T_C": "C", "stream_P_kPa": "kPa", "stream_mass_kg_h": "kg/h", "stream_vapor_fraction": "-", "stream_mass_fraction": "-", "streams_mass_sum_kg_h": "kg/h", "units_duty_sum_kJ_h": "kJ/h"}
 REACTORS = {"conversion_reactor": "conversion", "equilibrium_reactor": "equilibrium"}      # unit type -> kind of reaction it carries
 EQ_BASES = {"partial pressure", "activity", "fugacity", "molar fraction", "molar concentration", "mass concentration", "mass fraction"}      # the server's list for dwsim_reaction_add_equilibrium
+EXCHANGER_MODES = {"UA": "CalcBothTemp_UA", "hot_outlet_T": "CalcTempColdOut", "cold_outlet_T": "CalcTempHotOut"}      # case word -> DWSIM CalculationMode; hot_outlet_T = the hot outlet temperature is given and the cold outlet follows (verified 2026-11-21)
+EXCHANGER_FLOW = {"CounterCurrent", "CoCurrent"}
 REACTION_PHASES = {"Vapor", "Liquid", "Mixture"}
 THERMAL_MODES = {"isothermal": "Isothermic", "adiabatic": "Adiabatic"}      # case word -> DWSIM ReactorOperationMode (verified 2026-11-21)
 TOP = ("id", "source", "basis", "streams", "units", "reported", "tolerance", "status")
@@ -61,6 +63,27 @@ def _reaction_problems(pa, params, basis, kind="conversion") -> list[str]:
     else: p.append(f"{pa}.params.reaction needs basis.molar_mass_g_mol for every compound in it, to check the mass balance")
     return p
 
+
+
+def _exchanger_problems(pa, u, streams) -> list[str]:
+    """An exchanger has a hot side and a cold side, file order hot then cold on both the inlets and the outlets (DWSIM port 0 = hot, port 1 = cold), each stream marked with its `side`.
+    The mode decides what is given: UA (U and area), or one outlet temperature carried on that outlet stream."""
+    p, pr = [], u.get("params", {})
+    ins, outs = [x for x in streams if x.get("dst") == u["id"]], [x for x in streams if x.get("src") == u["id"]]
+    for name, group in (("inlet", ins), ("outlet", outs)):
+        if [x.get("side") for x in group] != ["hot", "cold"]: p.append(f"{pa}: an exchanger needs exactly two {name} streams with side 'hot' then 'cold' in file order, got {[x.get('side') for x in group]}")
+    mode = pr.get("mode")
+    if mode not in EXCHANGER_MODES: p.append(f"{pa}.params.mode must be one of {sorted(EXCHANGER_MODES)}")
+    if pr.get("flow") not in EXCHANGER_FLOW: p.append(f"{pa}.params.flow must be one of {sorted(EXCHANGER_FLOW)}")
+    pos = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+    if mode == "UA" and not (pos(pr.get("U_W_m2K")) and pos(pr.get("area_m2"))): p.append(f"{pa}.params needs positive U_W_m2K and area_m2 in UA mode")
+    if mode in ("hot_outlet_T", "cold_outlet_T") and len(outs) == 2:
+        o = outs[0] if mode == "hot_outlet_T" else outs[1]
+        if "T" not in o: p.append(f"{pa}: mode {mode} needs the T specification on outlet stream {o.get('id')}")
+    for k in ("hot_dP_Pa", "cold_dP_Pa"):
+        if k in pr and not (isinstance(pr[k], (int, float)) and not isinstance(pr[k], bool) and pr[k] >= 0): p.append(f"{pa}.params.{k} must be a number >= 0")
+    if not (pr.get("anchor") or pr.get("assumed")): p.append(f"{pa}.params needs an anchor (where in the source) or an assumed reason")
+    return p
 
 
 def validate(case: dict) -> list[str]:
@@ -119,6 +142,8 @@ def validate(case: dict) -> list[str]:
                 if how not in ("reported", "assumed", "reconstructed"): p.append(f"{pa}.composition.provenance[{k}] must be reported, assumed or reconstructed")
             if set(v) - set(c.get("provenance") or {}): p.append(f"{pa}.composition.provenance must cover every compound")
             if "reconstructed" in (c.get("provenance") or {}).values() and not c.get("check"): p.append(f"{pa}.composition is reconstructed: say in composition.check how it was confirmed")
+    for uid, u in units.items():
+        if u.get("type") == "exchanger": p += _exchanger_problems(f"unit {uid}", u, case["streams"])
     for uid, u in units.items():                                # a separator's outlets are connected in file order: port 0 = vapour, port 1 = liquid (verified on the DWSIM Vessel, 2026-11-20)
         if u.get("type") not in ("separator", *REACTORS): continue
         outs = [x for x in case["streams"] if x.get("src") == uid]

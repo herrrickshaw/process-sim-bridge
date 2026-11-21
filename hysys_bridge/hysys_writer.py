@@ -39,6 +39,9 @@ def plan_specs(fs: Flowsheet) -> list[tuple[str, str, float]]:
             f = flow_spec(s)
             if f: plan.append((s.id, *f))
     for u in fs.units.values():
+        if u.type == "exchanger":                                  # the one given outlet temperature (hot or cold) moves onto the unit; pressure drops are unit parameters
+            k = {"hot_outlet_T": 0, "cold_outlet_T": 1}.get(u.params.get("mode"))
+            if k is not None and fs.streams[u.outlets[k]].T_C is not None: plan.append((u.outlets[k], "T", fs.streams[u.outlets[k]].T_C))
         for o in u.outlets:
             so = fs.streams[o]
             if u.type in ("pump", "valve", "compressor") and so.P_kPa is not None:

@@ -19,7 +19,7 @@ Status key: **verified** = built through our casebook or tool path and run on th
 | Flash, two phase | Flash2 (official) | Separator | Vessel | separator | **verified** against the flash drum tutorial (NRTL matches its values; PR and SRK differ as expected for a polar mixture); port 0 = vapour, port 1 = liquid | done |
 | Flash, three phase | Flash3, Decanter (official) | 3-Phase Separator | Vessel (phase settings unknown) | none | not driven | none |
 | Heater, cooler | Heater (official) | Heater, Cooler | Heater, Cooler | heater, cooler | **verified** with an independent CoolProp oracle through a phase change: Steam Tables within 0.07%, cubic EOS 4 to 15% off for water (cumene heater and recycle loop earlier) | done |
-| Heat exchanger | HeatX (official), MHeatX | Heat Exchanger | HeatExchanger | exchanger (in schema, not mapped) | server has it; not driven | DWSIM Heat Exchanger Design (not read) |
+| Heat exchanger | HeatX (official), MHeatX | Heat Exchanger | HeatExchanger | exchanger | **verified** for UA and hot-outlet modes, counter- and co-current, water and toluene (24 live runs, independent CoolProp references); other modes not mapped | done (architecture doc section 20) |
 | Pump | Pump (secondary) | Pump | Pump | pump | verified parameter mapping; no published duty case yet | cumene pumps (needs table matching) |
 | Compressor | Compr, MCompr (secondary) | Compressor | Compressor | compressor | parameter mapping verified; no published case | oil and gas plant (blocked, see architecture doc section 13), CCGT |
 | Expander, turbine | Compr in expander mode (secondary) | Expander | Expander | none | server has it | CCGT cases |

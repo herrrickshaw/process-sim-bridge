@@ -23,8 +23,8 @@ TOOLS = {
     "stream_results": "dwsim_stream_get_results", "add_conversion": "dwsim_reaction_add_conversion", "add_equilibrium": "dwsim_reaction_add_equilibrium", "explain": "dwsim_explain_result",
 }
 DWSIM_TYPE = {"mixer": "Mixer", "splitter": "Splitter", "pump": "Pump", "heater": "Heater", "cooler": "Cooler",
-              "valve": "Valve", "compressor": "Compressor", "separator": "Vessel", "recycle": "Recycle", "conversion_reactor": "ConversionReactor", "equilibrium_reactor": "EquilibriumReactor"}      # names are in dwsim_unitop_add's list
-UNIT_PARAMS_VERIFIED = {"pump", "heater", "cooler", "valve", "compressor", "mixer", "separator", "splitter", "recycle", "conversion_reactor", "equilibrium_reactor"}   # conversion_reactor: verified live 2026-11-21 (FOSSEE Exp 5); splitter: first outlet mass flow -> StreamMassFlowSpec, verified 2026-11-20 (1000 -> 300 + 700 kg/h)
+              "valve": "Valve", "compressor": "Compressor", "separator": "Vessel", "recycle": "Recycle", "conversion_reactor": "ConversionReactor", "equilibrium_reactor": "EquilibriumReactor", "exchanger": "HeatExchanger"}      # names are in dwsim_unitop_add's list
+UNIT_PARAMS_VERIFIED = {"pump", "heater", "cooler", "valve", "compressor", "mixer", "separator", "splitter", "recycle", "conversion_reactor", "equilibrium_reactor", "exchanger"}   # exchanger: UA, hot-outlet and cold-outlet modes verified live 2026-11-21; conversion_reactor: verified live 2026-11-21 (FOSSEE Exp 5); splitter: first outlet mass flow -> StreamMassFlowSpec, verified 2026-11-20 (1000 -> 300 + 700 kg/h)
 PACKAGE = {"Peng-Robinson": "Peng-Robinson (PR)", "SRK": "Soave-Redlich-Kwong (SRK)", "Steam Tables": "Steam Tables (IAPWS-IF97)"}
 KEYMAP = {"T": ("temperature_K", lambda v: v + 273.15, lambda v: v - 273.15),
           "P": ("pressure_Pa", lambda v: v * 1e3, lambda v: v / 1e3),
@@ -126,6 +126,15 @@ class DwsimBackend:
             p = {"ReactorOperationMode": {"isothermal": "Isothermic", "adiabatic": "Adiabatic"}[u["params"]["thermal_mode"]]}
             i, o = self.streams[ins[0]], self.streams[outs[0]]
             if "pressure_Pa" in o and "pressure_Pa" in i: p["DeltaP"] = i["pressure_Pa"] - o["pressure_Pa"]
+            return p
+        if t == "exchanger":                                                         # ports: 0 hot, 1 cold; case modes map to DWSIM calculation modes
+            q = u["params"]; mode = {"UA": "CalcBothTemp_UA", "hot_outlet_T": "CalcTempColdOut", "cold_outlet_T": "CalcTempHotOut"}[q["mode"]]
+            p = {"CalculationMode": mode, "FlowDir": q["flow"]}
+            if q["mode"] == "UA": p.update(OverallCoefficient=q["U_W_m2K"], Area=q["area_m2"])
+            elif q["mode"] == "hot_outlet_T": p["HotSideOutletTemperature"] = self.streams[outs[0]]["temperature_K"]
+            else: p["ColdSideOutletTemperature"] = self.streams[outs[1]]["temperature_K"]
+            if "hot_dP_Pa" in q: p["HotSidePressureDrop"] = q["hot_dP_Pa"]
+            if "cold_dP_Pa" in q: p["ColdSidePressureDrop"] = q["cold_dP_Pa"]
             return p
         if not (ins and outs): return {}
         i, o = self.streams[ins[0]], self.streams[outs[0]]

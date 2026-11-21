@@ -1,0 +1,221 @@
+{
+ "id": "water-exchanger-hot-outlet-specified",
+ "source": {
+  "title": "DWSIM tutorial 'Heat Exchanger Design' (intermediate/02-heat-exchanger-design)",
+  "doi": null,
+  "url": "https://dwsim.org/tutorials/en/intermediate/02-heat-exchanger-design.html",
+  "licence": "DWSIM project documentation (licence not checked; facts only)",
+  "use": "facts-only (specification and expected ranges); no text copied",
+  "read": "full-text",
+  "fetch_route": "direct GET via fetch_source.py",
+  "note": "constructed from the tutorial's streams: the tutorial names the outlet-temperature modes ('fix one outlet and return the U or area') but gives no numbers for them; the hot outlet of 80 C is my choice, flagged as assumed"
+ },
+ "basis": {
+  "compounds": [
+   "Water"
+  ],
+  "package_in_paper": "Steam Tables",
+  "packages": [
+   "Steam Tables",
+   "Peng-Robinson",
+   "SRK"
+  ],
+  "composition_basis": "mass",
+  "enthalpy_reference": "not used; outlet temperatures follow from an enthalpy balance"
+ },
+ "streams": [
+  {
+   "id": "HOT_IN",
+   "role": "feed",
+   "side": "hot",
+   "src": null,
+   "dst": "X",
+   "T": {
+    "value": 126.85000000000002,
+    "unit": "C",
+    "anchor": "DWSIM tutorial 'Heat Exchanger Design' (intermediate/02-heat-exchanger-design): hot inlet 400 K"
+   },
+   "P": {
+    "value": 304.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "DWSIM tutorial 'Heat Exchanger Design' (intermediate/02-heat-exchanger-design): 3 atm (304000 Pa)"
+   },
+   "mass_flow": {
+    "value": 3600.0,
+    "unit": "kg/h",
+    "anchor": "DWSIM tutorial 'Heat Exchanger Design' (intermediate/02-heat-exchanger-design): 1.0 kg/s"
+   },
+   "composition": {
+    "values": {
+     "Water": 1.0
+    },
+    "provenance": {
+     "Water": "reported"
+    }
+   }
+  },
+  {
+   "id": "COLD_IN",
+   "role": "feed",
+   "side": "cold",
+   "src": null,
+   "dst": "X",
+   "T": {
+    "value": 26.850000000000023,
+    "unit": "C",
+    "anchor": "DWSIM tutorial 'Heat Exchanger Design' (intermediate/02-heat-exchanger-design): cold inlet 300 K"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "DWSIM tutorial 'Heat Exchanger Design' (intermediate/02-heat-exchanger-design): 1 atm (101325 Pa)"
+   },
+   "mass_flow": {
+    "value": 7200.0,
+    "unit": "kg/h",
+    "anchor": "DWSIM tutorial 'Heat Exchanger Design' (intermediate/02-heat-exchanger-design): 2.0 kg/s"
+   },
+   "composition": {
+    "values": {
+     "Water": 1.0
+    },
+    "provenance": {
+     "Water": "reported"
+    }
+   }
+  },
+  {
+   "id": "HOT_OUT",
+   "role": "product",
+   "side": "hot",
+   "src": "X",
+   "dst": null,
+   "T": {
+    "value": 80.0,
+    "unit": "C",
+    "assumed": "the specification of this mode: hot outlet temperature 80 C, my choice (353.15 K)"
+   }
+  },
+  {
+   "id": "COLD_OUT",
+   "role": "product",
+   "side": "cold",
+   "src": "X",
+   "dst": null
+  }
+ ],
+ "units": [
+  {
+   "id": "X",
+   "type": "exchanger",
+   "params": {
+    "mode": "hot_outlet_T",
+    "flow": "CounterCurrent",
+    "hot_dP_Pa": 10000.0,
+    "cold_dP_Pa": 5000.0,
+    "anchor": "DWSIM tutorial 'Heat Exchanger Design' (intermediate/02-heat-exchanger-design): outlet-temperature modes named; pressure drops and counter-current as in the tutorial",
+    "assumed": "the hot outlet temperature value is not in the tutorial"
+   }
+  }
+ ],
+ "reported": [
+  {
+   "name": "hot_outlet_T",
+   "kind": "stream_T_C",
+   "target": "HOT_OUT",
+   "value": 80.0,
+   "unit": "C",
+   "anchor": "independent: energy balance only (no UA involved) with CoolProp IAPWS-95 enthalpies, computed 2026-11-21; hot outlet temperature = the specification",
+   "precision": "independent calculation",
+   "pass_rel": 0.005
+  },
+  {
+   "name": "cold_outlet_T",
+   "kind": "stream_T_C",
+   "target": "COLD_OUT",
+   "value": 50.51,
+   "unit": "C",
+   "anchor": "independent: energy balance only (no UA involved) with CoolProp IAPWS-95 enthalpies, computed 2026-11-21; cold outlet temperature",
+   "precision": "independent calculation",
+   "pass_rel": 0.005
+  },
+  {
+   "name": "hot_side_duty",
+   "kind": "unit_duty",
+   "target": "X",
+   "value": -712022.4,
+   "unit": "kJ/h",
+   "anchor": "independent: energy balance only (no UA involved) with CoolProp IAPWS-95 enthalpies, computed 2026-11-21; heat removed from the hot side, 197.7840 kW (negative: the hot stream loses enthalpy)",
+   "precision": "independent calculation",
+   "pass_rel": 0.01
+  },
+  {
+   "name": "hot_outlet_P",
+   "kind": "stream_P_kPa",
+   "target": "HOT_OUT",
+   "value": 294.0,
+   "unit": "kPa",
+   "anchor": "independent: energy balance only (no UA involved) with CoolProp IAPWS-95 enthalpies, computed 2026-11-21; inlet pressure minus the hot-side pressure drop",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "cold_outlet_P",
+   "kind": "stream_P_kPa",
+   "target": "COLD_OUT",
+   "value": 96.325,
+   "unit": "kPa",
+   "anchor": "independent: energy balance only (no UA involved) with CoolProp IAPWS-95 enthalpies, computed 2026-11-21; inlet pressure minus the cold-side pressure drop",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.01,
+  "note": "temperatures 0.5 percent and the duty 1 percent, fixed before the run"
+ },
+ "scenarios": [
+  {
+   "id": "hot-outlet-60C",
+   "why": "hot outlet specified at 60 C instead: more heat taken, independent energy balance",
+   "overrides": [
+    {
+     "stream": "HOT_OUT",
+     "path": [
+      "T",
+      "value"
+     ],
+     "set": 60.0
+    },
+    {
+     "reported": "hot_outlet_T",
+     "path": [
+      "value"
+     ],
+     "set": 60.0
+    },
+    {
+     "reported": "cold_outlet_T",
+     "path": [
+      "value"
+     ],
+     "set": 60.526
+    },
+    {
+     "reported": "hot_side_duty",
+     "path": [
+      "value"
+     ],
+     "set": -1013695.6
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "independent energy balance with CoolProp IAPWS-95 (no UA)",
+  "human": false
+ },
+ "status": "built"
+}

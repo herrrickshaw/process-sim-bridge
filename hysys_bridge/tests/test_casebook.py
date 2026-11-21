@@ -568,6 +568,55 @@ class Equilibrium(unittest.TestCase):
         self.assertEqual(fake.params["R"]["ReactorOperationMode"], "Isothermic")
 
 
+HX = {k: os.path.join(os.path.dirname(CASE), v + ".json") for k, v in (("A", "water-counter-current-exchanger-tutorial"), ("B", "water-exchanger-hot-outlet-specified"), ("C", "toluene-counter-current-exchanger-constructed"))}
+
+
+class Exchanger(unittest.TestCase):
+    def hx(self, k="A"): return schema.load(HX[k])
+    def problems(self, mutate, k="A"):
+        c = self.hx(k); mutate(c); return schema.validate(c)
+    def test_all_validate_and_scenarios_apply(self):
+        for k in HX:
+            c = self.hx(k); self.assertEqual(schema.validate(c), [], k)
+            for sc in c["scenarios"]: self.assertEqual(schema.validate(schema.apply_scenario(c, sc["id"])), [], sc["id"])
+
+    def test_exchanger_rules_fire(self):
+        up = lambda c: c["units"][0]["params"]
+        muts = [("'hot' then 'cold' in file order", lambda c: c["streams"][0].update(side="cold")),
+                ("'hot' then 'cold' in file order", lambda c: c["streams"][3].update(side="hot")),
+                ("params.mode must be", lambda c: up(c).update(mode="LMTD")),
+                ("params.flow must be", lambda c: up(c).update(flow="Crossflow")),
+                ("positive U_W_m2K and area_m2", lambda c: up(c).update(U_W_m2K=0)),
+                ("positive U_W_m2K and area_m2", lambda c: up(c).pop("area_m2")),
+                ("hot_dP_Pa must be", lambda c: up(c).update(hot_dP_Pa=-1)),
+                ("needs an anchor", lambda c: up(c).pop("anchor"))]
+        for needle, m in muts: self.assertTrue(any(needle in x for x in self.problems(m)), needle)
+        self.assertTrue(any("needs the T specification on outlet stream HOT_OUT" in x for x in self.problems(lambda c: c["streams"][2].pop("T"), "B")))
+
+    def test_reference_satisfies_its_own_heat_transfer_equation(self):
+        """Q = UA x LMTD with the case's own reported temperatures (counter-current): a transcription slip in any of them breaks it."""
+        import math
+        c = self.hx("A"); r = {x["name"]: x["value"] for x in c["reported"] if "value" in x}; s = {x["id"]: x for x in c["streams"]}; ua = c["units"][0]["params"]["U_W_m2K"] * c["units"][0]["params"]["area_m2"]
+        d1 = s["HOT_IN"]["T"]["value"] - r["cold_outlet_T"]; d2 = r["hot_outlet_T"] - s["COLD_IN"]["T"]["value"]
+        self.assertAlmostEqual(-r["hot_side_duty"] / 3600 * 1000, ua * (d1 - d2) / math.log(d1 / d2), delta=0.002 * ua * 69)
+
+    def test_backend_sends_the_mode_flow_and_drops(self):
+        from hysys_bridge import hysys_writer
+        for k, want in (("A", {"CalculationMode": "CalcBothTemp_UA", "FlowDir": "CounterCurrent", "OverallCoefficient": 2500.0, "Area": 1.0, "HotSidePressureDrop": 10000.0, "ColdSidePressureDrop": 5000.0}),
+                        ("B", {"CalculationMode": "CalcTempColdOut", "FlowDir": "CounterCurrent", "HotSideOutletTemperature": 353.15, "HotSidePressureDrop": 10000.0, "ColdSidePressureDrop": 5000.0})):
+            fake = FakeDwsim(); tr = type("T", (), {"call": lambda s, tool, a: fake.call(tool, a), "close": lambda s: None})()
+            be = DwsimBackend(tr); hysys_writer.write(schema.to_flowsheet(self.hx(k), "Steam Tables"), be); be.flush()
+            got = fake.params["X"]; self.assertEqual({a: got[a] for a in want}, want, k)
+            ports = fake.ports["X"]; self.assertEqual((ports["HOT_IN"][1], ports["COLD_IN"][1], ports["HOT_OUT"][1], ports["COLD_OUT"][1]), (0, 1, 0, 1))
+        co = schema.apply_scenario(self.hx("A"), "co-current")
+        fake = FakeDwsim(); tr = type("T", (), {"call": lambda s, tool, a: fake.call(tool, a), "close": lambda s: None})()
+        be = DwsimBackend(tr); hysys_writer.write(schema.to_flowsheet(co, "Steam Tables"), be); be.flush(); self.assertEqual(fake.params["X"]["FlowDir"], "CoCurrent")
+
+    def test_co_current_reference_is_less_effective_than_counter_current(self):
+        c = self.hx("A"); co = schema.apply_scenario(c, "co-current"); get = lambda cc: {x["name"]: x["value"] for x in cc["reported"] if "value" in x}
+        self.assertLess(abs(get(co)["hot_side_duty"]), abs(get(c)["hot_side_duty"]))        # same UA, parallel flow transfers less heat
+
+
 class Ledger(unittest.TestCase):
     def test_append_and_read_are_additive(self):
         with tempfile.TemporaryDirectory() as d:
