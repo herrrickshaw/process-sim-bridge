@@ -1,0 +1,42 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is the minimum: the code uses `X | None` annotations at runtime.
+        python-version: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Every third-party import in the code is lazy and optional, so the core tests need only pytest.
+      - run: pip install pytest pytest-cov
+
+      # pydexpi (DEXPI export tests) requires Python >= 3.12; on 3.10 those 11 tests are skipped.
+      - name: Install optional DEXPI support
+        if: matrix.python-version != '3.10'
+        run: pip install pydexpi
+
+      - run: pytest --cov=hysys_bridge --cov=valve_sizing --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: false
