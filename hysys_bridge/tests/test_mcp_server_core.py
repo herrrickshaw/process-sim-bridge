@@ -266,6 +266,17 @@ def test_live_case_path_must_be_hsc_and_exist(loaded, tmp_path, monkeypatch):
     assert err and msg.startswith("FileNotFoundError")
 
 
+def test_live_com_write_gates(loaded, tmp_path, monkeypatch):
+    monkeypatch.setattr(backend, "HysysCOM", FakeCOM)
+    case = tmp_path / "plant.hsc"; case.write_bytes(b"")
+    FakeCOM.made = []
+    err, msg = call("write_to_hysys", name="h", confirm=True, live=True, case_path=str(case))
+    assert err and msg == "PermissionError: live=true requires HYSYS_LIVE=1 in the server environment" and FakeCOM.made == []
+    monkeypatch.setenv("HYSYS_LIVE", "1")
+    err, msg = call("write_to_hysys", name="h", confirm=True, live=True)
+    assert err and msg == "PermissionError: live write needs case_path or use_active=true" and FakeCOM.made == []
+
+
 def test_live_flag_is_ignored_in_dry_plan(loaded):
     assert call("write_to_hysys", name="h", live=True)[1]["written"] is False        # confirm gate comes first
 

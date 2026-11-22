@@ -365,6 +365,12 @@ def test_mock_corrupt_hook_and_comp_copy():
     assert m.get_comp("s") == {"A": 1.0} and m.get_comp("none") == {} and m.solve() is True
 
 
+def test_type_map_pins_hysys_operation_strings():
+    assert backend.TYPE_MAP == {"mixer": "mixerop", "splitter": "teeop", "pump": "pumpop", "heater": "heaterop",
+                                "cooler": "coolerop", "valve": "valveop", "compressor": "compressor", "separator": "vesselop"}
+    assert backend.PROPS["P"] == ("Pressure", "kPa") and backend.PROPS["mol"] == ("MolarFlow", "kgmole/h")
+
+
 def test_mock_unit_registry():
     m = backend.MockHysys()
     for utype in backend.TYPE_MAP:

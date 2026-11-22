@@ -116,7 +116,7 @@ def two_into(utype):
     return fs
 
 
-@pytest.mark.parametrize("t", sorted(normalize.SINGLE_IN))
+@pytest.mark.parametrize("t", ["compressor", "cooler", "expander", "heater", "pump", "valve"])
 def test_single_inlet_units_get_a_mixer(t):
     fs = two_into(t)
     log = normalize.normalize(fs)
@@ -128,7 +128,7 @@ def test_single_inlet_units_get_a_mixer(t):
     assert fs.streams["a"].dst == "MX-X" and fs.streams["b"].dst == "MX-X"
 
 
-@pytest.mark.parametrize("t", sorted(normalize.MULTI_IN))
+@pytest.mark.parametrize("t", ["column", "mixer", "reactor", "separator"])
 def test_multi_inlet_units_are_left_alone(t):
     fs = two_into(t)
     assert normalize.normalize(fs) == [] and set(fs.units) == {"X"}
@@ -252,6 +252,12 @@ def test_composition_sum_tolerances():
     assert [i.level for i in issues(0.979)] == ["error"]                               # beyond 0.02
     assert [i.level for i in issues(0.981)] == ["warn"]                                # within 0.02: warning only
     assert [i.level for i in issues(1.021)] == ["error"] and [i.level for i in issues(1.019)] == ["warn"]
+
+
+def test_comp_tol_boundary_is_inclusive():
+    fs = fsv(); fs.streams["1"].composition = {"A": 0.75, "B": 0.75}          # total 1.5: exactly 0.5 off
+    assert validate.validate(fs, comp_tol=0.5) == []
+    assert [i.level for i in validate.validate(fs, comp_tol=0.4999)] == ["error"]
 
 
 def test_custom_comp_tol():

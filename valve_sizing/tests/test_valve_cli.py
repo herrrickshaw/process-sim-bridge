@@ -49,6 +49,11 @@ def test_steam(capsys):
     assert out == str(relief.size_steam(10000, 5000, 4800, "fire", 0.9, operating=4000)) + "\n"
 
 
+def test_steam_defaults(capsys):
+    out = run(capsys, "steam", "--mawp", "5000", "--w", "10000")
+    assert out == str(relief.size_steam(10000, 5000)) + "\n" and "Ksh = 1" in out
+
+
 def test_liquid(capsys):
     out = run(capsys, "liquid", "--mawp", "1000", "--set", "900", "--scenario", "single", "--operating", "700",
               "--q", "20", "--sg", "0.9", "--visc", "50", "--backpressure", "100")

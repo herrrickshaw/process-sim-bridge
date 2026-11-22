@@ -28,6 +28,7 @@ class TestLevels:
 
     def test_set_pressure_cap_is_inclusive_at_mawp(self):
         pressure.levels(1000, 1000)                                  # exactly MAWP is fine
+        pressure.levels(1000, 1000 + 1e-9)                           # the 1e-9 float tolerance is part of the contract
         with pytest.raises(ValueError, match="exceeds 100% of MAWP"):
             pressure.levels(1000, 1000.01)
 
@@ -122,6 +123,10 @@ class TestControlLiquid:
         assert r.choked is True and r.kv == pytest.approx(100 * math.sqrt(1 / dpc))
         assert r.notes[0].startswith("choked/flashing-limited: dP 7.40 bar >= 7.35 bar")
         assert len(r.notes) == 1                                      # sigma note suppressed when choked
+
+    def test_flashing_note_boundary_p2_equal_to_vapour_pressure(self):
+        r = control.liquid(100, 2, 1.9, 1.0, 1.9, 100, FL=1.0)           # p2 == pv: not (yet) flashing
+        assert r.choked is False and "downstream pressure below vapour pressure: flashing" not in r.notes
 
     def test_choke_boundary_is_inclusive(self):
         dpc = 0.81 * (10 - (0.96 - 0.28 * math.sqrt(0.01)) * 1.0)
@@ -245,6 +250,13 @@ class TestSteamKn:
 
 
 class TestSteamSizing:
+    def test_low_pressure_warning_boundary_is_15_psia(self, monkeypatch):
+        monkeypatch.setattr(relief, "PSI_PER_KPA", 1.0)
+        for p1, warned in ((15.0, False), (14.999, True)):
+            fake = pressure.Levels(100, 100, "single", 0.0, p1, 10.0, 130.0, [])
+            monkeypatch.setattr(relief, "levels", lambda *a, _f=fake, **k: _f)
+            assert bool(relief.size_steam(100, 100).warnings) is warned
+
     def test_low_pressure_warning(self):
         # relieving pressure just under 15 psia: MAWP 0 kPag -> P1 = (0 + 101.325)*0.145 = 14.7
         r = relief.size_steam(100, mawp=0.0)
@@ -291,7 +303,8 @@ class TestGasSizing:
         a = relief.size_gas(10000, 400, 28, 1.3, 1.0, 1000, backpressure=900, kb=1.0)
         b = relief.size_gas(10000, 400, 28, 1.3, 1.0, 1000, backpressure=900, kb=0.7)
         assert a.required_in2 == pytest.approx(b.required_in2)
-        assert any("subcritical flow" in w for w in a.warnings)
+        assert a.warnings[0] == "subcritical flow: a balanced-bellows or pilot valve is usually needed; kb not applied (F2 covers it)"
+        assert a.warnings[1].startswith("back pressure 90% of set > 10%")
         assert "F2" in a.detail
 
     def test_kb_applies_in_critical_flow(self):
@@ -299,6 +312,15 @@ class TestGasSizing:
         assert relief.size_gas(10000, 400, 28, 1.3, 1.0, 1000, kb=0.5).required_in2 == pytest.approx(2 * a)
         assert relief.size_gas(10000, 400, 28, 1.3, 1.0, 1000, kc=0.5).required_in2 == pytest.approx(2 * a)
         assert relief.size_gas(10000, 400, 28, 1.3, 1.0, 1000, kd=0.4875).required_in2 == pytest.approx(2 * a)
+
+    def test_regime_boundary_is_inclusive_at_critical_ratio(self, monkeypatch):
+        lv = pressure.levels(1000)
+        P1 = lv.relieving_abs * relief.PSI_PER_KPA
+        r = (200 + relief.ATM) * relief.PSI_PER_KPA / P1
+        monkeypatch.setattr(relief, "critical_ratio", lambda k: r)       # r == critical ratio exactly
+        assert relief.size_gas(10000, 400, 28, 1.3, 1.0, 1000, backpressure=200).detail["regime"] == "critical"
+        monkeypatch.setattr(relief, "critical_ratio", lambda k: r - 1e-12)
+        assert relief.size_gas(10000, 400, 28, 1.3, 1.0, 1000, backpressure=200).detail["regime"] == "subcritical"
 
     def test_backpressure_percentage_warning_threshold(self):
         # 10% of set (1000) = 100 kPag -> no warning ; above -> warning (if kb == 1)
@@ -360,6 +382,14 @@ class TestLiquidSizing:
         a = relief.size_liquid(20, 1.0, 1000).required_in2
         for kw in ({"kw": 0.5}, {"kc": 0.5}, {"kd": 0.325}):
             assert relief.size_liquid(20, 1.0, 1000, **kw).required_in2 == pytest.approx(2 * a, rel=5e-3)
+
+    def test_viscosity_iteration_converges_to_a_fixed_point(self):
+        r = relief.size_liquid(20, 1.0, 1000)
+        a = 20 * 4.40286754 / (38.0 * 0.65 * r.detail["Kv"]) * math.sqrt(1.0 / r.detail["dP_psi"])
+        assert r.required_in2 == pytest.approx(a, rel=1e-6)
+        r = relief.size_liquid(20, 0.9, 1000, viscosity_cP=2000)
+        a = 20 * 4.40286754 / (38.0 * 0.65 * r.detail["Kv"]) * math.sqrt(0.9 / r.detail["dP_psi"])
+        assert r.required_in2 == pytest.approx(a, rel=1e-6)
 
     def test_detail_reports_dp_and_reynolds(self):
         r = relief.size_liquid(20, 1.0, 1000)

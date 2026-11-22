@@ -124,6 +124,15 @@ def _legacy_streams(tmp_path):
     return dexpi_process.read_streams(str(tmp_path), "legacy.json")
 
 
+def test_read_streams_vector_composition_yields_numbers(tmp_path):
+    pytest.importorskip("pydexpi")
+    fs = extract_hmb.from_csv(SAMPLE); normalize.normalize(fs)
+    dexpi_process.export_json(fs, str(tmp_path), "v.json")
+    back = dexpi_process.read_streams(str(tmp_path), "v.json")
+    assert back["3"]["composition"] == {"Ethanol": pytest.approx(0.334), "Water": pytest.approx(0.666)}
+    assert back["1"]["composition"] == {"Water": pytest.approx(1.0)} and back["1"]["basis"] == "mole"
+
+
 def test_read_streams_legacy_per_component_composition_components_and_basis(tmp_path):
     back = _legacy_streams(tmp_path)
     assert set(back["3"]["composition"]) == {"Ethanol", "Water"} and back["3"]["basis"] == "mole"
