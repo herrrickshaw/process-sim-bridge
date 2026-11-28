@@ -10,11 +10,12 @@ PAGE = b"<html><title>DWSIM notes</title><body>DWSIM heater tutorial exercise.</
 def server():
     class H(http.server.BaseHTTPRequestHandler):
         hits, redirects, statuses, bodies = [], {}, {}, {}
+        redirect_code = 302
         def log_message(self, *a): pass
         def do_GET(self):
             cls = type(self); cls.hits.append(self.path)
             if self.path in cls.redirects:
-                self.send_response(302); self.send_header("Location", cls.redirects[self.path]); self.end_headers(); return
+                self.send_response(cls.redirect_code); self.send_header("Location", cls.redirects[self.path]); self.end_headers(); return
             if self.path in cls.statuses: self.send_response(cls.statuses[self.path]); self.end_headers(); return
             body = cls.bodies.get(self.path)
             if body is None and self.path == "/robots.txt": self.send_response(404); self.end_headers(); return
@@ -139,7 +140,45 @@ class Redirects(Base):
         self.assertEqual(row["status"], "error"); self.assertNotIn("local file", json.dumps(row))
 
 
+class Failures(Base):
+    def test_every_redirect_status_is_followed_by_the_checked_path(self):
+        self.A.bodies["/robots.txt"] = b"User-agent: *\nDisallow: /private\n"
+        for code in collect.REDIRECT_CODES:
+            with self.subTest(code=code):
+                self.A.hits.clear(); self.A.redirect_code = code
+                self.A.redirects.update({"/go": "/page", "/sneak": "/private/x"})
+                self.assertEqual([r["status"] for r in self.run_urls(self.a + "/go", self.a + "/sneak")], ["ok", "skipped-robots"])
+                self.assertNotIn("/private/x", self.A.hits)
+
+    def test_a_redirect_to_a_malformed_address_is_refused_and_the_run_carries_on(self):
+        for target in ("http://[not-an-address", "//[also-bad/x"):
+            with self.subTest(target):
+                self.A.redirects["/go"] = target
+                rows = self.run_urls(self.a + "/go", self.a + "/page")
+                self.assertEqual([r["status"] for r in rows], ["skipped-redirect", "ok"], rows)
+                self.assertIn("not a valid URL", rows[0]["why"])
+
+    def test_robots_txt_that_redirects_forever_skips_the_site(self):
+        self.A.redirects["/robots.txt"] = "/robots.txt"
+        self.assertEqual(self.run_urls(self.a + "/page")[0]["status"], "skipped-robots")
+        self.assertEqual(self.A.hits, ["/robots.txt"] * (collect.MAX_REDIRECTS + 1))
+
+    def test_a_connection_failure_is_recorded_and_the_next_url_is_still_tried(self):
+        def flaky(request, timeout):
+            if request.full_url.endswith("/slow"): raise TimeoutError("simulated")
+            return collect._open(request, timeout=timeout)
+        with tempfile.TemporaryDirectory() as d:
+            rows = collect.run([self.a + "/slow", self.a + "/page"], os.path.join(d, "g.jsonl"), robots=collect.Robots(),
+                               sleep=lambda s: None, opener=flaky)
+        self.assertEqual([r["status"] for r in rows], ["error", "ok"])
+        self.assertEqual(rows[0]["why"], "TimeoutError")
+
+
 class PublicAddress(unittest.TestCase):
+    def test_a_name_that_cannot_be_looked_up_is_not_public(self):
+        with mock.patch.object(collect.socket, "getaddrinfo", side_effect=OSError("no such host")):
+            self.assertFalse(collect._is_public("nowhere.example"))
+
     def test_loopback_private_and_link_local_are_not_public(self):
         for host in ("127.0.0.1", "localhost", "10.0.0.1", "192.168.1.1", "169.254.169.254", "::1"):
             with self.subTest(host):

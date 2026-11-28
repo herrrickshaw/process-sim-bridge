@@ -56,7 +56,10 @@ def licence_hint(text: str, html: str = "") -> str:
 
 
 class _NoAutoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *args, **kwargs): return None          # a 3xx comes back as HTTPError, so each hop is checked before it is requested
+    """A 3xx comes back as HTTPError, so each hop is checked before it is requested. The standard handler is replaced outright
+    because it reads Location itself and raises on a malformed one."""
+    def _leave_it(self, *args): return None
+    http_error_301 = http_error_302 = http_error_303 = http_error_307 = http_error_308 = _leave_it
 
 
 _open = urllib.request.build_opener(_NoAutoRedirect).open
@@ -77,8 +80,8 @@ def _is_public(host: str) -> bool:
 def _next_hop(current: str, location: str | None, seed: str) -> tuple[str | None, str]:
     """(url to request next, "") or (None, why this redirect is not followed). The reason never repeats the target: it may carry tokens or credentials."""
     if not location: return None, "redirect without a Location"
-    target = urllib.parse.urldefrag(urllib.parse.urljoin(current, location.strip()))[0]
     try:
+        target = urllib.parse.urldefrag(urllib.parse.urljoin(current, location.strip()))[0]
         if not _is_http(target): return None, "redirect to something other than http or https"
         p = urllib.parse.urlsplit(target)
         if "@" in p.netloc: return None, "redirect carries credentials"
