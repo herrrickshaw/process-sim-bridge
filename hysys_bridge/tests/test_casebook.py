@@ -916,16 +916,16 @@ class Tools(unittest.TestCase):
             err, msg = call("casebook_validate", case_id="../secret"); self.assertTrue(err); self.assertIn("case_id must be", msg)
         with mock.patch.dict(os.environ):
             os.environ.pop("DWSIM_MCP_CMD", None)
-            err, msg = call("casebook_run", case_id="cumene-alkylator-feed-heater"); self.assertTrue(err); self.assertIn("DWSIM_MCP_CMD", msg)
+            err, msg = call("casebook_run", case_id="cumene-alkylator-feed-heater", live=True); self.assertTrue(err); self.assertIn("DWSIM_MCP_CMD", msg)
 
     def test_run_writes_the_ledger_only_with_confirm(self):
         with tempfile.TemporaryDirectory() as d:
             orig, old = ledger.DEFAULT, runner.default_transport
             ledger.DEFAULT = os.path.join(d, "l.jsonl"); runner.default_transport = FakeTransport
             try:
-                err, r = call("casebook_run", case_id="cumene-alkylator-feed-heater", packages=["SRK"], scenarios=["base"]); self.assertFalse(err, r)
+                err, r = call("casebook_run", case_id="cumene-alkylator-feed-heater", packages=["SRK"], scenarios=["base"], live=True); self.assertFalse(err, r)
                 self.assertIn("not written", r["ledger"]); self.assertEqual(ledger.read(), [])
-                err, r = call("casebook_run", case_id="cumene-alkylator-feed-heater", packages=["SRK"], scenarios=["base"], confirm=True); self.assertFalse(err, r)
+                err, r = call("casebook_run", case_id="cumene-alkylator-feed-heater", packages=["SRK"], scenarios=["base"], live=True, confirm=True); self.assertFalse(err, r)
                 self.assertEqual(r["ledger_rows_written"], 1); self.assertEqual(len(ledger.read()), 1)
             finally:
                 ledger.DEFAULT, runner.default_transport = orig, old

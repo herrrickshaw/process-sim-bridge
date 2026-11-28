@@ -1,5 +1,5 @@
 """MCP tools for the casebook. The case directory and the DWSIM command are operator-set (CASEBOOK_DIR, DWSIM_MCP_CMD), never tool arguments;
-the ledger is only written with confirm=true; no simulator case is saved."""
+casebook_run and casebook_hazop have no mock, so they start DWSIM only with live=true; the ledger is only written with confirm=true; no simulator case is saved."""
 from __future__ import annotations
 import glob, os, re
 import copy, json
@@ -31,10 +31,23 @@ def t_validate(a):
     return {"case": a["case_id"], "valid": not probs, "problems": probs, "capability": schema.capability(c) if not probs else None, "hash": schema.case_hash(c)}
 
 
+def _not_live(a):
+    """None if the caller asked for a live run, else the answer to give instead of starting DWSIM."""
+    if a.get("live") is True: return None
+    return {"ran": False, "reason": "this has no mock: it starts live DWSIM with the command in DWSIM_MCP_CMD. Pass live=true to run it."}
+
+
+def _once(items):
+    """Each package or scenario once, in order: a repeat would start another simulator run for nothing."""
+    return list(dict.fromkeys(items)) if items else items
+
+
 def t_run(a):
     c = _load(a["case_id"]); probs = schema.validate(c)
     if probs: return {"ran": False, "reason": "case is not valid", "problems": probs}
-    run = runner.run_case(c, packages=a.get("packages"), scenarios=a.get("scenarios"))
+    stop = _not_live(a)
+    if stop: return stop
+    run = runner.run_case(c, packages=_once(a.get("packages")), scenarios=_once(a.get("scenarios")))
     if run["ran"]:
         if a.get("confirm") is True: run["ledger_rows_written"] = ledger.append(runner.ledger_rows(run))
         else: run["ledger"] = "not written: pass confirm=true to append the results to studies/ledger.jsonl"
@@ -57,9 +70,11 @@ def load_spec(spec_id):
 def t_hazop(a):
     spec = load_spec(a["spec_id"]); case = _load(spec["case"]); probs = schema.validate(case)
     if probs: return {"ran": False, "reason": "case is not valid", "problems": probs}
-    if a.get("packages"): spec = {**spec, "packages": a["packages"]}
+    if a.get("packages"): spec = {**spec, "packages": _once(a["packages"])}
     sp = hazop.validate_spec(spec, case)
     if sp: return {"ran": False, "reason": "the study spec is not valid", "problems": sp}
+    stop = _not_live(a)
+    if stop: return stop
     ws = hazop.run_study(spec, case); return {"ran": True, "worksheet": ws, "markdown": hazop.render_markdown(ws)}
 
 
@@ -88,10 +103,10 @@ _s = lambda props, req=(): {"type": "object", "properties": props, "required": l
 TOOLS = {
     "casebook_list": (t_list, "List the reference cases (from published studies) in the operator's case directory: status, validity, and whether every unit type is verified on the DWSIM backend.", _s({})),
     "casebook_validate": (t_validate, "Check one case record: every number has a source anchor or an assumed reason, pressure and composition bases are stated, reconstructed values say how they were checked.", _s({"case_id": {"type": "string"}}, ["case_id"])),
-    "casebook_run": (t_run, "Run a case on DWSIM (needs DWSIM_MCP_CMD) for each listed property package and scenario and compare with the published values; reports error per package and the spread between packages. Nothing is tuned. confirm=true appends the rows to the ledger.",
-                     _s({"case_id": {"type": "string"}, "packages": {"type": "array", "items": {"type": "string"}}, "scenarios": {"type": "array", "items": {"type": "string"}}, "confirm": {"type": "boolean"}}, ["case_id"])),
-    "casebook_hazop": (t_hazop, "Run a HAZOP deviation study (a spec in the operator's study directory) on its casebook case: each guide word plus parameter plus size is applied to a feed stream, solved on DWSIM (needs DWSIM_MCP_CMD), and the consequences are read from the simulation and the guardrails (declared safe limits, material balance). Returns a worksheet; causes and safeguards are the team's, no severity or recommendation is assigned, steady-state only. Nothing is written.",
-                       _s({"spec_id": {"type": "string"}, "packages": {"type": "array", "items": {"type": "string"}}}, ["spec_id"])),
+    "casebook_run": (t_run, "Run a case on live DWSIM (needs live=true and DWSIM_MCP_CMD; there is no mock) for each listed property package and scenario and compare with the published values; reports error per package and the spread between packages. Nothing is tuned. confirm=true appends the rows to the ledger.",
+                     _s({"case_id": {"type": "string"}, "packages": {"type": "array", "items": {"type": "string"}}, "scenarios": {"type": "array", "items": {"type": "string"}}, "live": {"type": "boolean"}, "confirm": {"type": "boolean"}}, ["case_id"])),
+    "casebook_hazop": (t_hazop, "Run a HAZOP deviation study (a spec in the operator's study directory) on its casebook case: each guide word plus parameter plus size is applied to a feed stream, solved on live DWSIM (needs live=true and DWSIM_MCP_CMD; there is no mock), and the consequences are read from the simulation and the guardrails (declared safe limits, material balance). Returns a worksheet; causes and safeguards are the team's, no severity or recommendation is assigned, steady-state only. Nothing is written.",
+                       _s({"spec_id": {"type": "string"}, "packages": {"type": "array", "items": {"type": "string"}}, "live": {"type": "boolean"}}, ["spec_id"])),
     "casebook_hazop_rules": (t_hazop_rules, "Look up the HAZOP cause and safeguard rules store: candidate causes for a guide word and parameter (optionally limited to the equipment you say is upstream), safeguard types, worked examples from the cited sources, and method notes. Every entry names the source it came from and how that source was read; all are unreviewed candidates for the study team. With no parameter, returns the sources and counts. Nothing is written.",
                               _s({"parameter": {"type": "string"}, "guide_word": {"type": "string"}, "upstream_equipment": {"type": "array", "items": {"type": "string"}}})),
     "casebook_hazop_nodes": (t_hazop_nodes, "Derive draft HAZOP study nodes from a flowsheet topology: for each feed stream a node (the feed plus the pumps, compressors and valves on its line), the equipment tags for the rules store, which units each feed reaches (recycle loops marked), the standard deviation set, and watch values on product streams. Sources: a casebook case (case_id) or a loaded flowsheet session such as a P&ID extraction (session, plus the case_id that supplies the values). Never invents a size: sized deviations come out without one until you pass a sizes table that carries its reason. Warns when the topology is an unreviewed extraction, and reports reconcile findings and tag mismatches with the case. Writes nothing.",
