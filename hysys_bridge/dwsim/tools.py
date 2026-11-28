@@ -14,7 +14,7 @@ from .backend import DwsimBackend, StdioTransport
 from .fake import FakeDwsim
 from .guardrails import check_specs
 
-CASES: dict[str, dict] = {}                 # session name -> {"be": DwsimBackend, "transport": closable|None, "live": bool}
+CASES: dict[str, dict] = {}                 # session name -> {"be": DwsimBackend, "transport": closable|None, "live": bool, "built_from": str}
 
 
 def _fs(name):
@@ -22,9 +22,20 @@ def _fs(name):
     return M._fs(name)
 
 
-def _case(name):
+def _built(name):
     if name not in CASES: raise KeyError(f"no DWSIM case for session {name!r}; run dwsim_build first (built: {sorted(CASES) or 'none'})")
     return CASES[name]
+
+
+def _case(name):
+    """The built case, for solving or using results: refused unless the session still holds what the case was built from."""
+    c = _built(name)
+    from .. import mcp_server as M          # late import: mcp_server imports this module
+    fs = M.SESSIONS.get(name)
+    if fs is None or fs.fingerprint() != c["built_from"]:
+        raise RuntimeError(f"session {name!r} has changed since dwsim_build (or is gone), so this case and its results are out of date; "
+                           "run dwsim_build with confirm=true and dwsim_solve again")
+    return c
 
 
 def _close(name):
@@ -55,12 +66,13 @@ def t_build(a):
     _close(a["name"])
     transport = StdioTransport(shlex.split(os.environ["DWSIM_MCP_CMD"])) if live else None
     be = DwsimBackend(transport or FakeDwsim(), mw=a.get("molar_masses"))
+    built_from = fs.fingerprint()
     try:
         rows = hysys_writer.write(fs, be)
     except Exception:
         if transport: transport.close()
         raise
-    CASES[a["name"]] = {"be": be, "transport": transport, "live": live}
+    CASES[a["name"]] = {"be": be, "transport": transport, "live": live, "built_from": built_from}
     return {"built": True, "backend": "DWSIM" if live else "mock", "specs_buffered": len(rows), "saved": False,
             "note": "specs are buffered locally; they reach DWSIM at dwsim_solve. Pre-solve read-back is local, not from DWSIM."
                     + ("" if live else " Mock backend: nothing is calculated.")}
@@ -86,7 +98,7 @@ def t_read_stream(a):
 
 
 def t_close(a):
-    _case(a["name"]); _close(a["name"]); return {"closed": a["name"]}
+    _built(a["name"]); _close(a["name"]); return {"closed": a["name"]}
 
 
 def _s(props, req): return {"type": "object", "properties": props, "required": req, "additionalProperties": False}

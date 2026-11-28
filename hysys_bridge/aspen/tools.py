@@ -22,9 +22,20 @@ def _fs(name):
     return M._fs(name)
 
 
-def _case(name):
+def _built(name):
     if name not in CASES: raise KeyError(f"no Aspen case for session {name!r}; run aspen_build first (built: {sorted(CASES) or 'none'})")
     return CASES[name]
+
+
+def _case(name):
+    """The built case, for solving or using results: refused unless the session still holds what the case was built from."""
+    c = _built(name)
+    from .. import mcp_server as M          # late import: mcp_server imports this module
+    fs = M.SESSIONS.get(name)
+    if fs is None or fs.fingerprint() != c["built_from"]:
+        raise RuntimeError(f"session {name!r} has changed since aspen_build (or is gone), so this case and its results are out of date; "
+                           "run aspen_build with confirm=true and aspen_run again")
+    return c
 
 
 def _close(name):
@@ -56,6 +67,7 @@ def t_build(a):
     _close(a["name"])
     tree = AspenComTree(os.environ["ASPEN_MODEL_PATH"]) if live else MockTree()
     be = AspenBackend(tree, allow_unverified=bool(a.get("allow_unverified")))
+    built_from = fs.fingerprint()
     try:
         rows = hysys_writer.write(fs, be)
     except NotImplementedError as e:
@@ -64,7 +76,7 @@ def t_build(a):
     except Exception:
         if hasattr(tree, "close"): tree.close()
         raise
-    CASES[a["name"]] = {"be": be, "tree": tree, "live": live}
+    CASES[a["name"]] = {"be": be, "tree": tree, "live": live, "built_from": built_from}
     bad = [str(r) for r in rows if r.status != "OK"]
     return {"built": True, "backend": "Aspen" if live else "mock", "specs_written": len(rows), "not_ok": bad, "saved": False}
 
@@ -84,7 +96,7 @@ def t_read_stream(a):
 
 
 def t_close(a):
-    _case(a["name"]); _close(a["name"]); return {"closed": a["name"]}
+    _built(a["name"]); _close(a["name"]); return {"closed": a["name"]}
 
 
 def _s(props, req): return {"type": "object", "properties": props, "required": req, "additionalProperties": False}
