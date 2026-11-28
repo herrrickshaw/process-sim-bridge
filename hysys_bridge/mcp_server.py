@@ -260,6 +260,8 @@ from .utilities_link import TOOLS as _UTIL_TOOLS      # utility_* tools: air, ni
 TOOLS.update(_UTIL_TOOLS)
 from .polymer_link import TOOLS as _POLYMER_TOOLS     # polymer_* tools: method-of-moments stream attributes and mixing (Aspen Polymers arithmetic)
 TOOLS.update(_POLYMER_TOOLS)
+from .hmb_report_link import TOOLS as _HMB_REPORT_TOOLS  # safety_hmb_report: HMB closure / model / P&ID audit via the safety toolkit
+TOOLS.update(_HMB_REPORT_TOOLS)
 
 
 # ---- JSON-RPC / MCP stdio loop ----------------------------------------------------------------------------
