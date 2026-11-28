@@ -53,6 +53,10 @@ merge_pid_hmb, score, plan_specs, write_to_hysys, export_dexpi, export_dexpi_pro
 Typical chain: `extract_pid` (or `load_dexpi`) -> `reconcile` -> `load_hmb` -> `merge_pid_hmb` -> `normalize` -> `validate`
 -> `plan_specs` -> `write_to_hysys` (confirm=true).
 
+A DWSIM or Aspen case belongs to the session contents it was built from. If the session is changed or removed, solving the case and every tool that uses its results refuse until you build and solve again; closing it still works.
+
+Every true/false argument must be a JSON boolean: text such as `"false"`, numbers and null are refused.
+
 Safety: writes need `confirm=true` and clean validation; they go to the MOCK backend unless `live=true`, the server is
 started with `HYSYS_LIVE=1`, the OS is Windows with HYSYS, and you name `case_path` (.hsc) or `use_active=true`. The tool never saves or
 overwrites a case. `extract_pid` uploads the drawing to Anthropic's API and needs `confirm_upload=true` + `ANTHROPIC_API_KEY`.

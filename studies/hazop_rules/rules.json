@@ -1,0 +1,601 @@
+{
+ "about": "Reusable HAZOP knowledge for the deviation runner: candidate causes per guide word and parameter, safeguard types, worked examples and method notes, each with its source. Every entry is a CANDIDATE for the study team to accept, change or discard; nothing here is a finding about a particular plant, and the runner never puts a suggestion into the team's own cause or safeguard fields. Entries come only from sources that were read; nothing is added from memory. Causes are restated as short generic phrases.",
+ "sources": [
+  {
+   "id": "safeche-hazop-tutorial",
+   "title": "HAZOP Tutorial, SafeChE, University of Michigan (Table 2, Typical Causes of Deviations in Process Parameters; steps 3 to 6)",
+   "url": "https://safeche.engin.umich.edu/tutorials/hazop-tutorial",
+   "licence": "none seen on the page; facts only, causes restated as short generic phrases, no text copied beyond names of failure modes",
+   "how_read": "read in full from a Wayback copy dated 2025-08-11 (the live page answered a bot challenge, which was not bypassed)",
+   "read": "2026-11-21"
+  },
+  {
+   "id": "nptel-iitm-lecture-13",
+   "title": "Lecture 13, Hazard and Operability Studies (HAZOP), Dr. Raghuram Chetty, IIT Madras, NPTEL course 103106071 (Chemical Plant Safety and Risk Assessment)",
+   "url": "https://archive.nptel.ac.in/content/storage2/courses/103106071/lec13.pdf",
+   "licence": "none seen on the file; facts only, the worked examples are summarised, not copied",
+   "how_read": "fetched once and read in full (text layer, 13,203 characters)",
+   "read": "2026-11-21"
+  }
+ ],
+ "causes": [
+  {
+   "id": "flow-none-valve-closed",
+   "parameter": "flow",
+   "guide_word": "NONE",
+   "text": "valve closed",
+   "equipment": "valve",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-none-pump-failure",
+   "parameter": "flow",
+   "guide_word": "NONE",
+   "text": "pump failure",
+   "equipment": "pump",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-none-pressure-difference",
+   "parameter": "flow",
+   "guide_word": "NONE",
+   "text": "incorrect pressure difference",
+   "equipment": "process",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-none-leakage",
+   "parameter": "flow",
+   "guide_word": "NONE",
+   "text": "major leakage",
+   "equipment": "line",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-less-pump-cavitation",
+   "parameter": "flow",
+   "guide_word": "LESS",
+   "text": "pump cavitation",
+   "equipment": "pump",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-less-fouling",
+   "parameter": "flow",
+   "guide_word": "LESS",
+   "text": "fouling",
+   "equipment": "line",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-less-partial-blockage",
+   "parameter": "flow",
+   "guide_word": "LESS",
+   "text": "partial blockage",
+   "equipment": "line",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-more-valve-open",
+   "parameter": "flow",
+   "guide_word": "MORE",
+   "text": "valve fully open",
+   "equipment": "valve",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-more-pump-speed",
+   "parameter": "flow",
+   "guide_word": "MORE",
+   "text": "increased pump speed",
+   "equipment": "pump",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-more-pressure-difference",
+   "parameter": "flow",
+   "guide_word": "MORE",
+   "text": "increased pressure difference",
+   "equipment": "process",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-reverse-pump-trip",
+   "parameter": "flow",
+   "guide_word": "REVERSE",
+   "text": "pump trip",
+   "equipment": "pump",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-reverse-pressure-difference",
+   "parameter": "flow",
+   "guide_word": "REVERSE",
+   "text": "incorrect differential pressure",
+   "equipment": "process",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "flow-reverse-check-valve",
+   "parameter": "flow",
+   "guide_word": "REVERSE",
+   "text": "check valve passing",
+   "equipment": "valve",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "pressure-more-closed-discharge",
+   "parameter": "pressure",
+   "guide_word": "MORE",
+   "text": "closed discharge",
+   "equipment": "line",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "pressure-more-control-failure",
+   "parameter": "pressure",
+   "guide_word": "MORE",
+   "text": "pressure control failure",
+   "equipment": "controller",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "pressure-more-reboiling",
+   "parameter": "pressure",
+   "guide_word": "MORE",
+   "text": "excessive reboiling",
+   "equipment": "process",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "pressure-more-loss-of-reflux",
+   "parameter": "pressure",
+   "guide_word": "MORE",
+   "text": "loss of reflux",
+   "equipment": "process",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "pressure-less-pump-compressor-failure",
+   "parameter": "pressure",
+   "guide_word": "LESS",
+   "text": "pump or compressor failure",
+   "equipment": "pump",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "temperature-more-heater-control",
+   "parameter": "temperature",
+   "guide_word": "MORE",
+   "text": "heater control failure",
+   "equipment": "heater",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "temperature-more-runaway",
+   "parameter": "temperature",
+   "guide_word": "MORE",
+   "text": "runaway reaction",
+   "equipment": "process",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "temperature-less-loss-of-heating",
+   "parameter": "temperature",
+   "guide_word": "LESS",
+   "text": "loss of heating",
+   "equipment": "heater",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "temperature-less-fouled-exchanger",
+   "parameter": "temperature",
+   "guide_word": "LESS",
+   "text": "fouled exchanger",
+   "equipment": "exchanger",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "level-more-control-failure",
+   "parameter": "level",
+   "guide_word": "MORE",
+   "text": "level control failure",
+   "equipment": "controller",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "level-more-input-exceeds-output",
+   "parameter": "level",
+   "guide_word": "MORE",
+   "text": "more input than output",
+   "equipment": "process",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "level-less-control-failure",
+   "parameter": "level",
+   "guide_word": "LESS",
+   "text": "level control failure",
+   "equipment": "controller",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "level-less-output-exceeds-input",
+   "parameter": "level",
+   "guide_word": "LESS",
+   "text": "less input than output",
+   "equipment": "process",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "composition-other-than-leaking-tubes",
+   "parameter": "composition",
+   "guide_word": "OTHER_THAN",
+   "text": "leaking exchanger tubes",
+   "equipment": "exchanger",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "composition-other-than-feed-change",
+   "parameter": "composition",
+   "guide_word": "OTHER_THAN",
+   "text": "feed change",
+   "equipment": "process",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "composition-other-than-wrong-additives",
+   "parameter": "composition",
+   "guide_word": "OTHER_THAN",
+   "text": "wrong additives",
+   "equipment": "process",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "composition-other-than-extra-reactions",
+   "parameter": "composition",
+   "guide_word": "OTHER_THAN",
+   "text": "additional reactions",
+   "equipment": "process",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "status": "candidate-unreviewed"
+  }
+ ],
+ "safeguard_types": [
+  {
+   "id": "safeguard-process-alarm",
+   "text": "process alarms",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "applies_to": "any",
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "safeguard-sop",
+   "text": "standard operating procedures",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "applies_to": "any",
+   "status": "candidate-unreviewed"
+  },
+  {
+   "id": "safeguard-psv",
+   "text": "pressure safety valves",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ],
+   "applies_to": "pressure",
+   "status": "candidate-unreviewed"
+  }
+ ],
+ "worked_examples": [
+  {
+   "id": "ex-transfer-line-no-flow",
+   "context": "hydrocarbon transfer from a settling tank to a reactor by two pumps (one spare), level control valve with bypass, non-return valve",
+   "parameter": "flow",
+   "guide_word": "NONE",
+   "causes": [
+    "no hydrocarbon available from storage",
+    "transfer pump fails (motor fault, loss of power, corroded impeller)"
+   ],
+   "consequence": "loss of feed to the reactor",
+   "responses_in_source": [
+    "ensure good communication with the storage area",
+    "install a low level alarm on the settling tank"
+   ],
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  },
+  {
+   "id": "ex-transfer-line-more-flow",
+   "context": "same transfer line",
+   "parameter": "flow",
+   "guide_word": "MORE",
+   "causes": [
+    "level control valve fails open or is bypassed in error"
+   ],
+   "consequence": "settling tank overfills",
+   "responses_in_source": [
+    "install a high level alarm",
+    "check the size of the overflow",
+    "establish a locking-off procedure for the level control valve bypass when not in use"
+   ],
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  },
+  {
+   "id": "ex-transfer-line-no-flow-closed-valve",
+   "context": "same transfer line",
+   "parameter": "flow",
+   "guide_word": "NONE",
+   "causes": [
+    "isolation valve or level control valve closed while the pump runs"
+   ],
+   "consequence": "line subjected to full pump pressure",
+   "responses_in_source": [
+    "install kickback (minimum flow return) on the pumps"
+   ],
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  },
+  {
+   "id": "ex-transfer-line-more-temperature",
+   "context": "same transfer line",
+   "parameter": "temperature",
+   "guide_word": "MORE",
+   "causes": [
+    "high temperature in the intermediate storage"
+   ],
+   "consequence": "higher pressure in the transfer line and settling tank",
+   "responses_in_source": [
+    "install a warning of high temperature at the intermediate storage"
+   ],
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  },
+  {
+   "id": "ex-cooling-coil-no-flow",
+   "context": "exothermic reactor cooled by water through a coil, control valve, controller",
+   "parameter": "flow",
+   "guide_word": "NONE",
+   "causes": [
+    "control valve fails closed",
+    "plugged cooling coils",
+    "cooling water service failure",
+    "controller fails and closes the valve",
+    "air pressure fails, closing the valve"
+   ],
+   "consequence": "loss of cooling, possible runaway",
+   "responses_in_source": [
+    "select a valve that fails open",
+    "install a filter with a maintenance procedure",
+    "install a cooling water flow meter with a low-flow alarm",
+    "install a high temperature alarm to alert the operator",
+    "check and monitor the reliability of the water service",
+    "place the controller on the critical instrumentation list"
+   ],
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  },
+  {
+   "id": "ex-cooling-coil-more-flow",
+   "context": "same cooling coil",
+   "parameter": "flow",
+   "guide_word": "MORE",
+   "causes": [
+    "control valve fails open",
+    "controller fails and opens the valve"
+   ],
+   "consequence": "reactor cools, reactant concentration builds, possible runaway on heating",
+   "responses_in_source": [
+    "instruct operators and update procedures"
+   ],
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  },
+  {
+   "id": "ex-cooling-coil-less-flow",
+   "context": "same cooling coil",
+   "parameter": "flow",
+   "guide_word": "LESS",
+   "causes": [
+    "partially plugged cooling line",
+    "partial water source failure",
+    "control valve fails to respond"
+   ],
+   "consequence": "diminished cooling, possible runaway",
+   "responses_in_source": [
+    "see the filter, flow meter and alarm responses for no flow",
+    "place the valve on the critical instrumentation list"
+   ],
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  },
+  {
+   "id": "ex-cooling-coil-reverse-flow",
+   "context": "same cooling coil",
+   "parameter": "flow",
+   "guide_word": "REVERSE",
+   "causes": [
+    "failure of the water source resulting in backflow",
+    "backflow due to high back pressure"
+   ],
+   "consequence": "loss of cooling, possible runaway",
+   "responses_in_source": [
+    "install a check valve"
+   ],
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  },
+  {
+   "id": "ex-cooling-coil-more-temperature",
+   "context": "same cooling coil",
+   "parameter": "temperature",
+   "guide_word": "MORE",
+   "causes": [
+    "high water supply temperature when cooling capacity is limited"
+   ],
+   "consequence": "cooling system capacity limited, temperature increases",
+   "responses_in_source": [
+    "install a high flow alarm and/or a cooling water high temperature alarm"
+   ],
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  },
+  {
+   "id": "ex-stirrer-no-agitation",
+   "context": "stirrer of the same reactor",
+   "parameter": "agitation",
+   "guide_word": "NONE",
+   "causes": [
+    "stirrer motor malfunction",
+    "power failure"
+   ],
+   "consequence": "no mixing, possible accumulation of unreacted materials",
+   "responses_in_source": [
+    "interlock with the feed line",
+    "monomer feed valve must fail closed on loss of power"
+   ],
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  }
+ ],
+ "method_notes": [
+  {
+   "id": "consequences-without-safeguards",
+   "text": "Consequences are written assuming the existing safeguards are not working.",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ]
+  },
+  {
+   "id": "safeguards-are-not-recommendations",
+   "text": "Safeguards are protections in place; recommendations are protections to be added.",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ]
+  },
+  {
+   "id": "not-considered",
+   "text": "Not considered in a HAZOP: simultaneous unrelated incidents, simultaneous failure of more than one independent protection, natural calamity, sabotage.",
+   "sources": [
+    "safeche-hazop-tutorial"
+   ]
+  },
+  {
+   "id": "known-weaknesses",
+   "text": "HAZOP does not identify all causes, takes little account of probabilities, is poor where multiple-combination events matter, and tends to ignore operator intervention.",
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  },
+  {
+   "id": "identifying-technique",
+   "text": "HAZOP identifies hazards; it is not a means of solving problems.",
+   "sources": [
+    "nptel-iitm-lecture-13"
+   ]
+  }
+ ]
+}

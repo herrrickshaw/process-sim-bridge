@@ -1,0 +1,155 @@
+{
+ "id": "water-heater-raoult-fossee-exp9",
+ "source": {
+  "title": "SASTRA FOSSEE 'Process Simulation Using DWSIM' (Naren, v02, Dec 2017), Experiment 9",
+  "doi": null,
+  "url": "https://primary.fossee.in/dwsim/manuals/SASTRA-FOSSEE-DWSIM-v02-30Dec17.pdf",
+  "licence": "none seen on the document (index row licence_hint none-seen); facts only",
+  "use": "facts-only (specification and structure); no text or figures copied",
+  "read": "full-text",
+  "fetch_route": "fetch_source.py, one GET after robots.txt allowed; text layer read in full (58 pages)",
+  "note": "the results table is an image; the duty is an independent IAPWS-95 enthalpy difference"
+ },
+ "basis": {
+  "compounds": [
+   "Water"
+  ],
+  "package_in_paper": "Raoult's Law",
+  "packages": [
+   "Raoult's Law",
+   "Steam Tables",
+   "Peng-Robinson",
+   "SRK"
+  ],
+  "composition_basis": "mass",
+  "enthalpy_reference": "not used"
+ },
+ "streams": [
+  {
+   "id": "FLOW_IN",
+   "role": "feed",
+   "src": null,
+   "dst": "HEATER",
+   "T": {
+    "value": 25.0,
+    "unit": "C",
+    "anchor": "FOSSEE DWSIM manual Exp 9: 25 C"
+   },
+   "P": {
+    "value": 100.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "FOSSEE DWSIM manual Exp 9: 1 bar"
+   },
+   "mass_flow": {
+    "value": 50.0,
+    "unit": "kg/h",
+    "anchor": "FOSSEE DWSIM manual Exp 9: 50 kg/h"
+   },
+   "composition": {
+    "values": {
+     "Water": 1.0
+    },
+    "provenance": {
+     "Water": "reported"
+    }
+   }
+  },
+  {
+   "id": "FLOW_OUT",
+   "role": "product",
+   "src": "HEATER",
+   "dst": null,
+   "T": {
+    "value": 90.0,
+    "unit": "C",
+    "anchor": "FOSSEE DWSIM manual Exp 9: outlet 90 C"
+   },
+   "P": {
+    "value": 100.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "FOSSEE DWSIM manual Exp 9: 1 bar; no pressure drop stated"
+   }
+  }
+ ],
+ "units": [
+  {
+   "id": "HEATER",
+   "type": "heater"
+  }
+ ],
+ "reported": [
+  {
+   "name": "heater_duty",
+   "kind": "unit_duty",
+   "target": "HEATER",
+   "value": 13607.178,
+   "unit": "kJ/h",
+   "anchor": "FOSSEE DWSIM manual Exp 9: duty to heat 50 kg/h water 25 to 90 C at 1 bar; independent: CoolProp IAPWS-95 enthalpy difference, 3.7798 kW, computed 2026-11-21",
+   "precision": "independent calculation",
+   "pass_rel": 0.01
+  },
+  {
+   "name": "outlet_T",
+   "kind": "stream_T_C",
+   "target": "FLOW_OUT",
+   "value": 90.0,
+   "unit": "C",
+   "anchor": "FOSSEE DWSIM manual Exp 9: 90 C",
+   "precision": "specified",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "outlet_vapor_fraction",
+   "kind": "stream_vapor_fraction",
+   "target": "FLOW_OUT",
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 9: liquid water at 90 C and 1 bar (saturation 99.6 C)",
+   "precision": "independent calculation",
+   "range": [
+    0.0,
+    0.001
+   ]
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.01,
+  "note": "1 percent on the duty, fixed before the run: Raoult's law uses the package's own liquid heat-capacity correlation, not IAPWS-95, so exact agreement is not expected"
+ },
+ "scenarios": [
+  {
+   "id": "heat-to-60C",
+   "why": "a smaller rise, still liquid, tests that the duty follows the temperature change (independent duty 7316.434 kJ/h)",
+   "overrides": [
+    {
+     "stream": "FLOW_OUT",
+     "path": [
+      "T",
+      "value"
+     ],
+     "set": 60.0
+    },
+    {
+     "reported": "outlet_T",
+     "path": [
+      "value"
+     ],
+     "set": 60.0
+    },
+    {
+     "reported": "heater_duty",
+     "path": [
+      "value"
+     ],
+     "set": 7316.434
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "duty recomputed independently with CoolProp (IAPWS-95)",
+  "human": false
+ },
+ "status": "built"
+}

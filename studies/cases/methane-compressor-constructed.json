@@ -1,0 +1,154 @@
+{
+ "id": "methane-compressor-constructed",
+ "source": {
+  "title": "Constructed exercise (not from a publication): a methane compressor from 1 bar to 5 bar",
+  "doi": null,
+  "url": "https://archive.nptel.ac.in/content/syllabus_pdf/103105210.pdf",
+  "licence": "none: my own specification",
+  "use": "specification written for this repo",
+  "read": "computed",
+  "fetch_route": "not applicable (no document)",
+  "note": "every input is my choice, flagged assumed. The topic comes from the IIT Kharagpur NPTEL course plan (Principles and Practices of Process Equipment and Plant Design, week 10: plant hydraulics, pumps and compressors); the lectures are videos and their transcripts could not be reached, so none of their content or numbers is used"
+ },
+ "basis": {
+  "compounds": [
+   "Methane"
+  ],
+  "package_in_paper": "Peng-Robinson",
+  "packages": [
+   "Peng-Robinson",
+   "SRK",
+   "Raoult's Law"
+  ],
+  "composition_basis": "mass",
+  "enthalpy_reference": "not used"
+ },
+ "streams": [
+  {
+   "id": "IN",
+   "role": "feed",
+   "src": null,
+   "dst": "U",
+   "T": {
+    "value": 25.0,
+    "unit": "C",
+    "assumed": "my choice"
+   },
+   "P": {
+    "value": 100.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "assumed": "my choice"
+   },
+   "mass_flow": {
+    "value": 3600.0,
+    "unit": "kg/h",
+    "assumed": "my choice"
+   },
+   "composition": {
+    "values": {
+     "Methane": 1.0
+    },
+    "provenance": {
+     "Methane": "assumed"
+    }
+   }
+  },
+  {
+   "id": "OUT",
+   "role": "product",
+   "src": "U",
+   "dst": null,
+   "P": {
+    "value": 500.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "assumed": "my choice"
+   }
+  }
+ ],
+ "units": [
+  {
+   "id": "U",
+   "type": "compressor"
+  }
+ ],
+ "reported": [
+  {
+   "name": "compressor_duty",
+   "kind": "unit_duty",
+   "target": "U",
+   "value": 1432966.36,
+   "unit": "kJ/h",
+   "anchor": "independent: CoolProp methane, isentropic enthalpy rise divided by 0.75 (DWSIM default, to be confirmed by the run)",
+   "precision": "independent calculation",
+   "pass_rel": 0.03
+  },
+  {
+   "name": "outlet_T",
+   "kind": "stream_T_C",
+   "target": "OUT",
+   "value": 186.7158,
+   "unit": "C",
+   "anchor": "independent: outlet enthalpy at the outlet pressure, same efficiency",
+   "precision": "independent calculation",
+   "pass_rel": 0.03
+  },
+  {
+   "name": "outlet_P",
+   "kind": "stream_P_kPa",
+   "target": "OUT",
+   "value": 500.0,
+   "unit": "kPa",
+   "anchor": "the unit's specification",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.03,
+  "note": "duty and outlet temperature 3 percent, fixed before the run; the paper package (Peng-Robinson) is itself my assumption; Raoult's Law is listed to show what an ideal-gas package gives"
+ },
+ "scenarios": [
+  {
+   "id": "discharge-10-bar",
+   "why": "the same compressor to 10 bar (independent calculation)",
+   "overrides": [
+    {
+     "stream": "OUT",
+     "path": [
+      "P",
+      "value"
+     ],
+     "set": 1000.0
+    },
+    {
+     "reported": "compressor_duty",
+     "path": [
+      "value"
+     ],
+     "set": 2212602.18
+    },
+    {
+     "reported": "outlet_T",
+     "path": [
+      "value"
+     ],
+     "set": 261.966
+    },
+    {
+     "reported": "outlet_P",
+     "path": [
+      "value"
+     ],
+     "set": 1000.0
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "independent isentropic and isenthalpic calculations with CoolProp",
+  "human": false
+ },
+ "status": "built"
+}

@@ -1,0 +1,279 @@
+{
+ "id": "pentane-hexane-heptane-flash-fossee-exp7",
+ "source": {
+  "title": "SASTRA FOSSEE 'Process Simulation Using DWSIM' (Naren, v02, Dec 2017), Experiment 7",
+  "doi": null,
+  "url": "https://primary.fossee.in/dwsim/manuals/SASTRA-FOSSEE-DWSIM-v02-30Dec17.pdf",
+  "licence": "none seen on the document (index row licence_hint none-seen); facts only",
+  "use": "facts-only (specification and structure); no text or figures copied",
+  "read": "full-text",
+  "fetch_route": "fetch_source.py, one GET after robots.txt allowed; text layer read in full (58 pages)",
+  "note": "the results table is an image; the numbers are an independent ideal-solution flash. Raoult's law in DWSIM uses its own vapour-pressure correlations, so small differences from the CoolProp values are expected"
+ },
+ "basis": {
+  "compounds": [
+   "N-pentane",
+   "N-hexane",
+   "N-heptane"
+  ],
+  "package_in_paper": "Raoult's Law",
+  "packages": [
+   "Raoult's Law",
+   "Peng-Robinson",
+   "SRK"
+  ],
+  "composition_basis": "mole",
+  "molar_mass_g_mol": {
+   "N-pentane": 72.14878,
+   "N-hexane": 86.17536,
+   "N-heptane": 100.202
+  },
+  "molar_mass_source": "CoolProp 7",
+  "enthalpy_reference": "not used"
+ },
+ "streams": [
+  {
+   "id": "FEED_IN",
+   "role": "feed",
+   "src": null,
+   "dst": "FLASH",
+   "T": {
+    "value": 69.0,
+    "unit": "C",
+    "anchor": "FOSSEE DWSIM manual Exp 7: 69 C"
+   },
+   "P": {
+    "value": 101.3,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "FOSSEE DWSIM manual Exp 7: 1.013 bar"
+   },
+   "mass_flow": {
+    "value": 8687.671,
+    "unit": "kg/h",
+    "anchor": "FOSSEE DWSIM manual Exp 7: 100 kmol/h converted with the stated molar masses"
+   },
+   "composition": {
+    "values": {
+     "N-pentane": 0.25,
+     "N-hexane": 0.45,
+     "N-heptane": 0.3
+    },
+    "provenance": {
+     "N-pentane": "reported",
+     "N-hexane": "reported",
+     "N-heptane": "reported"
+    }
+   }
+  },
+  {
+   "id": "VAP_OUT",
+   "role": "product",
+   "src": "FLASH",
+   "dst": null,
+   "phase": "vapor"
+  },
+  {
+   "id": "LIQ_OUT",
+   "role": "product",
+   "src": "FLASH",
+   "dst": null,
+   "phase": "liquid"
+  }
+ ],
+ "units": [
+  {
+   "id": "FLASH",
+   "type": "separator"
+  }
+ ],
+ "reported": [
+  {
+   "name": "feed_vapor_fraction",
+   "kind": "stream_vapor_fraction",
+   "target": "FEED_IN",
+   "value": 0.43298,
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 7: flash at 69 C, 1.013 bar; independent: Rachford-Rice with ideal K = Psat/P, Psat from CoolProp (n-pentane 275.99, n-hexane 102.23, n-heptane 39.09 kPa at 69 C), computed 2026-11-21 (mole basis)",
+   "precision": "independent calculation",
+   "pass_rel": 0.03
+  },
+  {
+   "name": "vapor_mass_flow",
+   "kind": "stream_mass_kg_h",
+   "target": "VAP_OUT",
+   "value": 3590.15,
+   "unit": "kg/h",
+   "anchor": "FOSSEE DWSIM manual Exp 7: vapour outlet; independent: Rachford-Rice with ideal K = Psat/P, Psat from CoolProp (n-pentane 275.99, n-hexane 102.23, n-heptane 39.09 kPa at 69 C), computed 2026-11-21",
+   "precision": "independent calculation",
+   "pass_rel": 0.03
+  },
+  {
+   "name": "liquid_mass_flow",
+   "kind": "stream_mass_kg_h",
+   "target": "LIQ_OUT",
+   "value": 5097.52,
+   "unit": "kg/h",
+   "anchor": "FOSSEE DWSIM manual Exp 7: liquid outlet; independent: Rachford-Rice with ideal K = Psat/P, Psat from CoolProp (n-pentane 275.99, n-hexane 102.23, n-heptane 39.09 kPa at 69 C), computed 2026-11-21",
+   "precision": "independent calculation",
+   "pass_rel": 0.03
+  },
+  {
+   "name": "vapor_pentane_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "VAP_OUT",
+   "value": 0.33931,
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 7: vapour composition; independent: Rachford-Rice with ideal K = Psat/P, Psat from CoolProp (n-pentane 275.99, n-hexane 102.23, n-heptane 39.09 kPa at 69 C), computed 2026-11-21",
+   "precision": "independent calculation",
+   "compound": "N-pentane",
+   "pass_rel": 0.03
+  },
+  {
+   "name": "liquid_pentane_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "LIQ_OUT",
+   "value": 0.11487,
+   "unit": "-",
+   "anchor": "FOSSEE DWSIM manual Exp 7: liquid composition; independent: Rachford-Rice with ideal K = Psat/P, Psat from CoolProp (n-pentane 275.99, n-hexane 102.23, n-heptane 39.09 kPa at 69 C), computed 2026-11-21",
+   "precision": "independent calculation",
+   "compound": "N-pentane",
+   "pass_rel": 0.03
+  },
+  {
+   "name": "outlet_mass_sum",
+   "kind": "streams_mass_sum_kg_h",
+   "value": 8687.671,
+   "unit": "kg/h",
+   "anchor": "FOSSEE DWSIM manual Exp 7: vapour plus liquid equals the feed (exact mass balance)",
+   "precision": "exact",
+   "targets": [
+    "VAP_OUT",
+    "LIQ_OUT"
+   ],
+   "pass_rel": 0.0001
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.03,
+  "note": "3 percent, fixed before the run, because DWSIM's Raoult's law vapour pressures are not the CoolProp equations of state; the mass balance is exact (0.01 percent)"
+ },
+ "scenarios": [
+  {
+   "id": "below-dew-pressure",
+   "why": "self-learning question 2a: the ideal dew pressure at 69 C is 77.03 kPa, so 70 kPa should vaporise the whole feed; the vapour then has the feed composition (independent calculation)",
+   "drop_reported": [
+    "liquid_mass_flow",
+    "liquid_pentane_mass_fraction"
+   ],
+   "overrides": [
+    {
+     "stream": "FEED_IN",
+     "path": [
+      "P",
+      "value"
+     ],
+     "set": 70.0
+    },
+    {
+     "reported": "feed_vapor_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 1.0
+    },
+    {
+     "reported": "vapor_mass_flow",
+     "path": [
+      "value"
+     ],
+     "set": 8687.67
+    },
+    {
+     "reported": "vapor_pentane_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.20762
+    }
+   ]
+  },
+  {
+   "id": "above-dew-temperature",
+   "why": "self-learning question 2b: the ideal dew temperature at 1.013 bar is 77.38 C, so 80 C should be fully vapour with the feed composition",
+   "drop_reported": [
+    "liquid_mass_flow",
+    "liquid_pentane_mass_fraction"
+   ],
+   "overrides": [
+    {
+     "stream": "FEED_IN",
+     "path": [
+      "T",
+      "value"
+     ],
+     "set": 80.0
+    },
+    {
+     "reported": "feed_vapor_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 1.0
+    },
+    {
+     "reported": "vapor_mass_flow",
+     "path": [
+      "value"
+     ],
+     "set": 8687.67
+    },
+    {
+     "reported": "vapor_pentane_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.20762
+    }
+   ]
+  },
+  {
+   "id": "above-bubble-pressure",
+   "why": "the ideal bubble pressure at 69 C is 126.73 kPa, so 140 kPa should leave the feed fully liquid with the feed composition",
+   "drop_reported": [
+    "feed_vapor_fraction",
+    "vapor_mass_flow",
+    "vapor_pentane_mass_fraction"
+   ],
+   "overrides": [
+    {
+     "stream": "FEED_IN",
+     "path": [
+      "P",
+      "value"
+     ],
+     "set": 140.0
+    },
+    {
+     "reported": "liquid_mass_flow",
+     "path": [
+      "value"
+     ],
+     "set": 8687.67
+    },
+    {
+     "reported": "liquid_pentane_mass_fraction",
+     "path": [
+      "value"
+     ],
+     "set": 0.20762
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "independent Rachford-Rice flash with CoolProp vapour pressures; mass balance exact",
+  "human": false
+ },
+ "status": "built"
+}

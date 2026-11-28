@@ -1,0 +1,346 @@
+{
+ "id": "hdpe-slurry-open-loop-liu-sharma",
+ "source": {
+  "title": "Liu, Y. A. and Sharma, N., Introduction to Integrated Process Modeling, Advanced Control, and Data Analytics in Optimizing Polyolefin Manufacturing (chapter 1; engrXiv preprint), workshop 1.2, simplified slurry HDPE process, open-loop results",
+  "doi": "10.31224/4406",
+  "url": "https://engrxiv.org/preprint/view/4406",
+  "licence": "Creative Commons Attribution 4.0 International (stated on the engrXiv landing page, posted 2025-02-26): reuse with attribution; numbers and structure used here, no text or figures copied",
+  "use": "facts and numbers with attribution to Liu and Sharma (2025), doi 10.31224/4406",
+  "read": "full-text",
+  "local_copy": {
+   "filename": "Chapter1IntroductiontoIntegratedProcessModelingAdvancedControlDataAnalytics.pdf",
+   "sha256": "b5aac40114e3619e740e84091dfcca3a945699c460a7869028d0f35cf44a29db",
+   "supplied_by": "the repository owner, from a local copy (same title and preprint statement as the engrXiv landing page; not compared page by page with the engrXiv PDF)",
+   "pages": "pages 21 to 26"
+  },
+  "fetch_route": "landing page fetched once (licence and identity); the workshop pages read from the local copy, page 25 re-rendered at 300 dpi to confirm the printed digits",
+  "note": "BLOCKED: an RCSTR with Ziegler-Natta polymerization kinetics (70 reactions, five catalyst sites, POLYSL equation of state, polymer component attributes) cannot be run on any backend in this repository. Recorded as an answer key. The VAPOR product stream is not printed in the chapter. The text's first-run MWW (7.194163E6) disagrees with the printed DPW (254569) by 0.73 percent, and the text says 97.94 percent where 5525.38/5700 is 96.94 percent: see the architecture doc"
+ },
+ "basis": {
+  "compounds": [
+   "C2H4",
+   "C4H8",
+   "HDPE",
+   "TiCl4",
+   "TEAL",
+   "H2",
+   "HX",
+   "N2"
+  ],
+  "package_in_paper": "POLYSL",
+  "packages": [
+   "POLYSL"
+  ],
+  "composition_basis": "mass",
+  "enthalpy_reference": "not used"
+ },
+ "streams": [
+  {
+   "id": "C2",
+   "role": "feed",
+   "src": null,
+   "dst": "R1",
+   "T": {
+    "value": 40,
+    "unit": "C",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "P": {
+    "value": 1300,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "mass_flow": {
+    "value": 5700.0,
+    "unit": "kg/h",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "composition": {
+    "values": {
+     "C2H4": 1.0,
+     "C4H8": 0.0,
+     "HDPE": 0.0,
+     "TiCl4": 0.0,
+     "TEAL": 0.0,
+     "H2": 0.0,
+     "HX": 0.0,
+     "N2": 0.0
+    },
+    "provenance": {
+     "C2H4": "reported",
+     "C4H8": "reported",
+     "HDPE": "reported",
+     "TiCl4": "reported",
+     "TEAL": "reported",
+     "H2": "reported",
+     "HX": "reported",
+     "N2": "reported"
+    }
+   }
+  },
+  {
+   "id": "CAT",
+   "role": "feed",
+   "src": null,
+   "dst": "R1",
+   "T": {
+    "value": 20,
+    "unit": "C",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "P": {
+    "value": 700,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "mass_flow": {
+    "value": 255.31,
+    "unit": "kg/h",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "composition": {
+    "values": {
+     "C2H4": 0.0,
+     "C4H8": 0.0,
+     "HDPE": 0.0,
+     "TiCl4": 0.0047785,
+     "TEAL": 0.0045435,
+     "H2": 0.0,
+     "HX": 0.990678,
+     "N2": 0.0
+    },
+    "provenance": {
+     "C2H4": "reported",
+     "C4H8": "reported",
+     "HDPE": "reported",
+     "TiCl4": "reported",
+     "TEAL": "reported",
+     "H2": "reported",
+     "HX": "reported",
+     "N2": "reported"
+    }
+   }
+  },
+  {
+   "id": "H2",
+   "role": "feed",
+   "src": null,
+   "dst": "R1",
+   "T": {
+    "value": 25,
+    "unit": "C",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "P": {
+    "value": 101.325,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "mass_flow": {
+    "value": 8.0,
+    "unit": "kg/h",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "composition": {
+    "values": {
+     "C2H4": 0.0,
+     "C4H8": 0.0,
+     "HDPE": 0.0,
+     "TiCl4": 0.0,
+     "TEAL": 0.0,
+     "H2": 1.0,
+     "HX": 0.0,
+     "N2": 0.0
+    },
+    "provenance": {
+     "C2H4": "reported",
+     "C4H8": "reported",
+     "HDPE": "reported",
+     "TiCl4": "reported",
+     "TEAL": "reported",
+     "H2": "reported",
+     "HX": "reported",
+     "N2": "reported"
+    }
+   }
+  },
+  {
+   "id": "HX",
+   "role": "feed",
+   "src": null,
+   "dst": "R1",
+   "T": {
+    "value": 40,
+    "unit": "C",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "P": {
+    "value": 1400,
+    "unit": "kPa",
+    "basis": "absolute",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "mass_flow": {
+    "value": 15000.0,
+    "unit": "kg/h",
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41 stream results"
+   },
+   "composition": {
+    "values": {
+     "C2H4": 0.0,
+     "C4H8": 0.0,
+     "HDPE": 0.0,
+     "TiCl4": 0.0,
+     "TEAL": 0.0,
+     "H2": 0.0,
+     "HX": 1.0,
+     "N2": 0.0
+    },
+    "provenance": {
+     "C2H4": "reported",
+     "C4H8": "reported",
+     "HDPE": "reported",
+     "TiCl4": "reported",
+     "TEAL": "reported",
+     "H2": "reported",
+     "HX": "reported",
+     "N2": "reported"
+    }
+   }
+  },
+  {
+   "id": "R1OUT",
+   "role": "intermediate",
+   "src": "R1",
+   "dst": "FLASH"
+  },
+  {
+   "id": "VAPOR",
+   "role": "product",
+   "src": "FLASH",
+   "dst": null,
+   "phase": "vapor"
+  },
+  {
+   "id": "POLYMER",
+   "role": "product",
+   "src": "FLASH",
+   "dst": null,
+   "phase": "liquid"
+  }
+ ],
+ "units": [
+  {
+   "id": "R1",
+   "type": "reactor",
+   "params": {
+    "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): R1 is an RCSTR with Ziegler-Natta kinetics (70 reactions, TiCl4 with five active sites, 0.00172 mol of sites per g of catalyst), property method POLYSL",
+    "model": "RCSTR"
+   }
+  },
+  {
+   "id": "FLASH",
+   "type": "separator"
+  }
+ ],
+ "reported": [
+  {
+   "name": "polymer_T",
+   "kind": "stream_T_C",
+   "target": "POLYMER",
+   "value": 85.0,
+   "unit": "C",
+   "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41, POLYMER stream",
+   "precision": "printed",
+   "pass_rel": 0.005
+  },
+  {
+   "name": "polymer_P",
+   "kind": "stream_P_kPa",
+   "target": "POLYMER",
+   "value": 755.0,
+   "unit": "kPa",
+   "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41, POLYMER stream",
+   "precision": "printed",
+   "pass_rel": 0.001
+  },
+  {
+   "name": "polymer_mass",
+   "kind": "stream_mass_kg_h",
+   "target": "POLYMER",
+   "value": 20875.2,
+   "unit": "kg/h",
+   "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41, POLYMER stream mass flow 20875.2 kg/h",
+   "precision": "printed",
+   "pass_rel": 0.01
+  },
+  {
+   "name": "polymer_C2H4_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "POLYMER",
+   "compound": "C2H4",
+   "value": 0.00057136,
+   "unit": "-",
+   "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41, POLYMER stream, C2H4 11.9272 kg/h of 20875.2",
+   "precision": "printed, converted",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "polymer_HDPE_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "POLYMER",
+   "compound": "HDPE",
+   "value": 0.2723241,
+   "unit": "-",
+   "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41, POLYMER stream, HDPE 5684.82 kg/h of 20875.2",
+   "precision": "printed, converted",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "polymer_H2_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "POLYMER",
+   "compound": "H2",
+   "value": 9.57e-05,
+   "unit": "-",
+   "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41, POLYMER stream, H2 1.99774 kg/h of 20875.2",
+   "precision": "printed, converted",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "polymer_HX_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "POLYMER",
+   "compound": "HX",
+   "value": 0.72690561,
+   "unit": "-",
+   "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41, POLYMER stream, HX 15174.3 kg/h of 20875.2",
+   "precision": "printed, converted",
+   "pass_rel": 0.02
+  },
+  {
+   "name": "polymer_TEAL_mass_fraction",
+   "kind": "stream_mass_fraction",
+   "target": "POLYMER",
+   "compound": "TEAL",
+   "value": 4.444e-05,
+   "unit": "-",
+   "anchor": "Liu and Sharma (2023), chapter 1, section 1.3 (slurry HDPE workshop): figure 1.41, POLYMER stream, TEAL 0.927715 kg/h of 20875.2",
+   "precision": "printed, converted",
+   "pass_rel": 0.1
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.01,
+  "note": "tolerances fixed before any run; the case cannot run on the current backends"
+ },
+ "scenarios": [],
+ "review": {
+  "method": "values transcribed from the printed stream table, digits confirmed at 300 dpi; internal consistency checked in test_casebook (component sum, catalyst composition, moment relations)",
+  "human": false
+ },
+ "status": "blocked"
+}

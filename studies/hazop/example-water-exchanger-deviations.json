@@ -1,0 +1,134 @@
+{
+ "id": "example-water-exchanger-deviations",
+ "case": "water-counter-current-exchanger-tutorial",
+ "packages": [
+  "Steam Tables"
+ ],
+ "example": true,
+ "about": "A DEMONSTRATION of the runner on the DWSIM tutorial exchanger. The safe limits below are SYNTHETIC (invented for the demonstration, not plant limits) and the causes, safeguards and sizes are placeholders; nothing here is a real study. The upstream equipment listed for each node is also a placeholder, used only to show the rules-store filter.",
+ "design_limits": {
+  "streams": {
+   "HOT_OUT": {
+    "T_C": {
+     "max": 100.0
+    },
+    "anchor": "SYNTHETIC demonstration limit, not a design limit"
+   },
+   "COLD_OUT": {
+    "T_C": {
+     "max": 60.0
+    },
+    "P_kPa": {
+     "min": 90.0
+    },
+    "anchor": "SYNTHETIC demonstration limit, not a design limit"
+   }
+  }
+ },
+ "watch": [
+  {
+   "stream": "HOT_OUT",
+   "property": "T"
+  },
+  {
+   "stream": "COLD_OUT",
+   "property": "T"
+  },
+  {
+   "stream": "COLD_OUT",
+   "property": "vapor_fraction"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "hot-side",
+   "description": "hot water feed to the exchanger",
+   "stream": "HOT_IN",
+   "deviations": [
+    {
+     "id": "hot-flow-more",
+     "parameter": "flow",
+     "guide_word": "MORE",
+     "size": {
+      "relative": 0.5
+     },
+     "assumed": "demonstration size",
+     "cause": "placeholder: upstream control valve fails open",
+     "safeguards": [
+      "placeholder"
+     ]
+    },
+    {
+     "id": "hot-flow-none",
+     "parameter": "flow",
+     "guide_word": "NONE",
+     "cause": "placeholder: upstream pump trips",
+     "safeguards": [
+      "placeholder"
+     ]
+    },
+    {
+     "id": "hot-flow-reverse",
+     "parameter": "flow",
+     "guide_word": "REVERSE",
+     "cause": "placeholder"
+    },
+    {
+     "id": "hot-temp-more",
+     "parameter": "temperature",
+     "guide_word": "MORE",
+     "size": {
+      "absolute": 15.0
+     },
+     "assumed": "demonstration size",
+     "cause": "placeholder: heater overshoot"
+    }
+   ],
+   "upstream_equipment": [
+    "pump",
+    "valve",
+    "heater"
+   ]
+  },
+  {
+   "id": "cold-side",
+   "description": "cold water feed to the exchanger",
+   "stream": "COLD_IN",
+   "deviations": [
+    {
+     "id": "cold-flow-less",
+     "parameter": "flow",
+     "guide_word": "LESS",
+     "size": {
+      "relative": 0.75
+     },
+     "assumed": "demonstration size",
+     "cause": "placeholder: strainer blockage",
+     "safeguards": [
+      "placeholder"
+     ]
+    },
+    {
+     "id": "cold-flow-none",
+     "parameter": "flow",
+     "guide_word": "NONE",
+     "cause": "placeholder: pump trip"
+    },
+    {
+     "id": "cold-pressure-less",
+     "parameter": "pressure",
+     "guide_word": "LESS",
+     "size": {
+      "absolute": 20.0
+     },
+     "assumed": "demonstration size",
+     "cause": "placeholder"
+    }
+   ],
+   "upstream_equipment": [
+    "pump",
+    "valve"
+   ]
+  }
+ ]
+}

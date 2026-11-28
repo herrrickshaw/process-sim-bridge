@@ -1,0 +1,147 @@
+{
+ "id": "methane-valve-isenthalpic-constructed",
+ "source": {
+  "title": "Constructed exercise (not from a publication): a methane throttling valve from 50 bar to 20 bar",
+  "doi": null,
+  "url": "https://archive.nptel.ac.in/content/syllabus_pdf/103105210.pdf",
+  "licence": "none: my own specification",
+  "use": "specification written for this repo",
+  "read": "computed",
+  "fetch_route": "not applicable (no document)",
+  "note": "every input is my choice, flagged assumed. The topic comes from the IIT Kharagpur NPTEL course plan (Principles and Practices of Process Equipment and Plant Design, week 10: plant hydraulics, pumps and compressors); the lectures are videos and their transcripts could not be reached, so none of their content or numbers is used"
+ },
+ "basis": {
+  "compounds": [
+   "Methane"
+  ],
+  "package_in_paper": "Peng-Robinson",
+  "packages": [
+   "Peng-Robinson",
+   "SRK",
+   "Raoult's Law"
+  ],
+  "composition_basis": "mass",
+  "enthalpy_reference": "not used"
+ },
+ "streams": [
+  {
+   "id": "IN",
+   "role": "feed",
+   "src": null,
+   "dst": "U",
+   "T": {
+    "value": 25.0,
+    "unit": "C",
+    "assumed": "my choice"
+   },
+   "P": {
+    "value": 5000.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "assumed": "my choice"
+   },
+   "mass_flow": {
+    "value": 3600.0,
+    "unit": "kg/h",
+    "assumed": "my choice"
+   },
+   "composition": {
+    "values": {
+     "Methane": 1.0
+    },
+    "provenance": {
+     "Methane": "assumed"
+    }
+   }
+  },
+  {
+   "id": "OUT",
+   "role": "product",
+   "src": "U",
+   "dst": null,
+   "P": {
+    "value": 2000.0,
+    "unit": "kPa",
+    "basis": "absolute",
+    "assumed": "my choice"
+   }
+  }
+ ],
+ "units": [
+  {
+   "id": "U",
+   "type": "valve"
+  }
+ ],
+ "reported": [
+  {
+   "name": "outlet_T",
+   "kind": "stream_T_C",
+   "target": "OUT",
+   "value": 11.9907,
+   "unit": "C",
+   "anchor": "independent: isenthalpic expansion (constant enthalpy) with CoolProp methane, so the real-gas Joule-Thomson cooling",
+   "precision": "independent calculation",
+   "pass_rel": 0.05
+  },
+  {
+   "name": "outlet_P",
+   "kind": "stream_P_kPa",
+   "target": "OUT",
+   "value": 2000.0,
+   "unit": "kPa",
+   "anchor": "the unit's specification",
+   "precision": "exact",
+   "pass_rel": 0.0001
+  },
+  {
+   "name": "outlet_vapor_fraction",
+   "kind": "stream_vapor_fraction",
+   "target": "OUT",
+   "value": 1.0,
+   "unit": "-",
+   "anchor": "methane at 25 C and below 50 bar is a gas",
+   "precision": "physical expectation",
+   "pass_rel": 0.001
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.05,
+  "note": "outlet temperature 5 percent (of the value in C; the real cooling is about 12 K so this is about 0.6 K), fixed before the run; the paper package is my assumption and Raoult's Law is listed to show that an ideal gas has no Joule-Thomson effect"
+ },
+ "scenarios": [
+  {
+   "id": "to-30-bar",
+   "why": "throttled only to 30 bar: less cooling (independent calculation)",
+   "overrides": [
+    {
+     "stream": "OUT",
+     "path": [
+      "P",
+      "value"
+     ],
+     "set": 3000.0
+    },
+    {
+     "reported": "outlet_T",
+     "path": [
+      "value"
+     ],
+     "set": 16.5562
+    },
+    {
+     "reported": "outlet_P",
+     "path": [
+      "value"
+     ],
+     "set": 3000.0
+    }
+   ]
+  }
+ ],
+ "review": {
+  "method": "independent isentropic and isenthalpic calculations with CoolProp",
+  "human": false
+ },
+ "status": "built"
+}

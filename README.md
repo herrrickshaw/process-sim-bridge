@@ -8,6 +8,10 @@ transcription errors, plus a valve-sizing calculator. Python 3.11+, standard lib
 | [`hysys_bridge`](hysys_bridge/README.md) | H&MB (CSV / vector PDF / OCR) and P&ID topology → validated flowsheet IR → Aspen HYSYS (COM or spreadsheet link) with read-back audit; DEXPI P&ID XML and DEXPI Process JSON export; MCP server. |
 | `valve_sizing` | Relief/safety valve sizing from MAWP (API 520 Part I: gas, steam, liquid, fire case) and control valve sizing (IEC 60534), CLI + tests. |
 
+HMB audit and report (closure checks, design vs model, P&ID links; Excel + visual HTML) uses the process-safety-design-toolkit:
+`PROCESS_SAFETY_PATH=<toolkit> python3 -m hysys_bridge.hmb_report_link design.csv --model results.csv --pid pid.xml --out-dir out`
+(MCP tool `safety_hmb_report`). Tested on the synthetic sample only.
+
 ## Status — read before relying on any of it
 - **Nothing has been run against a real Aspen HYSYS.** The COM backend and the spreadsheet link are tested only against mocks.
   Run a small known case and treat any read-back or propagation mismatch as a reason to distrust the result.

@@ -1,0 +1,210 @@
+{
+ "id": "derived-water-exchanger",
+ "case": "water-counter-current-exchanger-tutorial",
+ "draft": true,
+ "nodes": [
+  {
+   "id": "node-hot-in",
+   "description": "feed line HOT_IN -> X (exchanger)",
+   "stream": "HOT_IN",
+   "upstream_equipment": [
+    "exchanger"
+   ],
+   "deviations": [
+    {
+     "id": "hot-in-flow-none",
+     "parameter": "flow",
+     "guide_word": "NONE"
+    },
+    {
+     "id": "hot-in-flow-more",
+     "parameter": "flow",
+     "guide_word": "MORE",
+     "size": {
+      "relative": 0.2
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    },
+    {
+     "id": "hot-in-flow-less",
+     "parameter": "flow",
+     "guide_word": "LESS",
+     "size": {
+      "relative": 0.2
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    },
+    {
+     "id": "hot-in-flow-reverse",
+     "parameter": "flow",
+     "guide_word": "REVERSE"
+    },
+    {
+     "id": "hot-in-temperature-more",
+     "parameter": "temperature",
+     "guide_word": "MORE",
+     "size": {
+      "absolute": 10
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    },
+    {
+     "id": "hot-in-temperature-less",
+     "parameter": "temperature",
+     "guide_word": "LESS",
+     "size": {
+      "absolute": 10
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    },
+    {
+     "id": "hot-in-pressure-more",
+     "parameter": "pressure",
+     "guide_word": "MORE",
+     "size": {
+      "relative": 0.1
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    },
+    {
+     "id": "hot-in-pressure-less",
+     "parameter": "pressure",
+     "guide_word": "LESS",
+     "size": {
+      "relative": 0.1
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    }
+   ],
+   "line_units": [
+    "X"
+   ]
+  },
+  {
+   "id": "node-cold-in",
+   "description": "feed line COLD_IN -> X (exchanger)",
+   "stream": "COLD_IN",
+   "upstream_equipment": [
+    "exchanger"
+   ],
+   "deviations": [
+    {
+     "id": "cold-in-flow-none",
+     "parameter": "flow",
+     "guide_word": "NONE"
+    },
+    {
+     "id": "cold-in-flow-more",
+     "parameter": "flow",
+     "guide_word": "MORE",
+     "size": {
+      "relative": 0.2
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    },
+    {
+     "id": "cold-in-flow-less",
+     "parameter": "flow",
+     "guide_word": "LESS",
+     "size": {
+      "relative": 0.2
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    },
+    {
+     "id": "cold-in-flow-reverse",
+     "parameter": "flow",
+     "guide_word": "REVERSE"
+    },
+    {
+     "id": "cold-in-temperature-more",
+     "parameter": "temperature",
+     "guide_word": "MORE",
+     "size": {
+      "absolute": 10
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    },
+    {
+     "id": "cold-in-temperature-less",
+     "parameter": "temperature",
+     "guide_word": "LESS",
+     "size": {
+      "absolute": 10
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    },
+    {
+     "id": "cold-in-pressure-more",
+     "parameter": "pressure",
+     "guide_word": "MORE",
+     "size": {
+      "relative": 0.1
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    },
+    {
+     "id": "cold-in-pressure-less",
+     "parameter": "pressure",
+     "guide_word": "LESS",
+     "size": {
+      "relative": 0.1
+     },
+     "assumed": "SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+    }
+   ],
+   "line_units": [
+    "X"
+   ]
+  }
+ ],
+ "watch": [
+  {
+   "stream": "HOT_OUT",
+   "property": "T"
+  },
+  {
+   "stream": "HOT_OUT",
+   "property": "mass"
+  },
+  {
+   "stream": "HOT_OUT",
+   "property": "vapor_fraction"
+  },
+  {
+   "stream": "COLD_OUT",
+   "property": "T"
+  },
+  {
+   "stream": "COLD_OUT",
+   "property": "mass"
+  },
+  {
+   "stream": "COLD_OUT",
+   "property": "vapor_fraction"
+  }
+ ],
+ "derivation": {
+  "from": "casebook case",
+  "topology": "water-counter-current-exchanger-tutorial",
+  "complete": true,
+  "missing_sizes": [],
+  "mismatches": [],
+  "errors": [],
+  "warnings": [
+   "sizes were supplied by the team with the reason: SYNTHETIC demonstration sizes, not a site basis: 20% flow, 10 K temperature, 10% pressure"
+  ],
+  "units": {
+   "X": {
+    "type": "exchanger",
+    "reached_by_feeds": [
+     "COLD_IN",
+     "HOT_IN"
+    ],
+    "in_recycle": false,
+    "needs_signoff": false
+   }
+  },
+  "limits": "controllers and instrument loops are not in the topology, so no controller cause is derived; deviations are applied at feeds only; composition deviations need a named compound and a fraction and are not proposed; sizes and causes are the team's"
+ }
+}

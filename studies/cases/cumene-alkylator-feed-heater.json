@@ -1,0 +1,155 @@
+{
+ "id": "cumene-alkylator-feed-heater",
+ "source": {
+  "title": "Plant Design Manuscript: production of phenol and acetone from propylene and benzene via the cumene process (Aspen HYSYS V8 student report)",
+  "doi": null,
+  "url": "https://pdfcoffee.com/plant-design-manuscript-5-pdf-free.html",
+  "licence": "copyrighted by its author; third-party upload on pdfcoffee.com",
+  "use": "facts-only (process conditions); no text, tables or figures copied",
+  "read": "full-text",
+  "fetch_route": "direct GET of the pdfcoffee page text; composition table text was scrambled",
+  "note": "see examples/cumene_alkylator_feed_heater.py and docs/MODEL_SCENARIOS.md"
+ },
+ "basis": {
+  "compounds": [
+   "Benzene",
+   "Propylene"
+  ],
+  "package_in_paper": "NRTL",
+  "packages": [
+   "NRTL",
+   "Peng-Robinson",
+   "SRK"
+  ],
+  "composition_basis": "mole",
+  "molar_mass_g_mol": {
+   "Benzene": 78.114,
+   "Propylene": 42.081
+  },
+  "molar_mass_source": "standard atomic weights",
+  "enthalpy_reference": "each simulator's own; duty taken as stream enthalpy difference times mass flow"
+ },
+ "streams": [
+  {
+   "id": "TO_HEATER",
+   "role": "feed",
+   "src": null,
+   "dst": "HE100",
+   "T": {
+    "value": 72.429121,
+    "unit": "C",
+    "anchor": "PLANT DESIGN MANUSCRIPT stream table 'To Heater'"
+   },
+   "P": {
+    "value": 34.38675,
+    "unit": "bar",
+    "basis": "gauge",
+    "anchor": "PLANT DESIGN MANUSCRIPT stream table 'To Heater' (bar_g)"
+   },
+   "mass_flow": {
+    "value": 1071616.0,
+    "unit": "kg/h",
+    "anchor": "PLANT DESIGN MANUSCRIPT stream table 'To Heater'"
+   },
+   "composition": {
+    "values": {
+     "Propylene": 0.00574,
+     "Benzene": 0.99426
+    },
+    "provenance": {
+     "Propylene": "reconstructed",
+     "Benzene": "assumed"
+    },
+    "check": "propylene mole fraction read from the table and confirmed by a mole balance on the mixer feeds: 79.67 kmol/h x 0.990453 / 13,810 kmol/h = 0.00571; benzene is the assumed balance (no other component identified). Gives 77.9 kg/kmol against the report's 1,071,616/13,810 = 77.6, so about 0.4% of the stream is unexplained"
+   }
+  },
+  {
+   "id": "TO_ALKYLATOR",
+   "role": "product",
+   "src": "HE100",
+   "dst": null,
+   "T": {
+    "value": 170.0,
+    "unit": "C",
+    "anchor": "PLANT DESIGN MANUSCRIPT stream table 'To_Alkylator'"
+   },
+   "P": {
+    "value": 33.766222,
+    "unit": "bar",
+    "basis": "gauge",
+    "anchor": "PLANT DESIGN MANUSCRIPT stream table 'To_Alkylator' (bar_g)"
+   }
+  }
+ ],
+ "units": [
+  {
+   "id": "HE100",
+   "type": "heater"
+  }
+ ],
+ "reported": [
+  {
+   "name": "heater_duty",
+   "kind": "unit_duty",
+   "target": "HE100",
+   "value": 210583600.9,
+   "unit": "kJ/h",
+   "anchor": "energy stream Q-Heater100 (report; enthalpy rise from the stream table is 2.11e8 kJ/h at three digits)",
+   "precision": "as printed, 7 significant digits"
+  }
+ ],
+ "tolerance": {
+  "pass_rel": 0.05,
+  "note": "the spread across property packages in this case is about 6%, as large as the gap to the report, so a single-package match is partly luck"
+ },
+ "scenarios": [
+  {
+   "id": "propylene-0.00571",
+   "why": "the mole balance gives 0.00571 where the table gives 0.00574: both are inside the reading uncertainty of the reconstruction",
+   "overrides": [
+    {
+     "stream": "TO_HEATER",
+     "path": [
+      "composition",
+      "values"
+     ],
+     "set": {
+      "Propylene": 0.00571,
+      "Benzene": 0.99429
+     }
+    }
+   ]
+  },
+  {
+   "id": "mass-from-mole-flow",
+   "why": "the 0.4% mismatch between mole flow x reconstructed molar mass and the reported mass flow: take the mass flow implied by 13,810.09 kmol/h instead of the reported one",
+   "overrides": [
+    {
+     "stream": "TO_HEATER",
+     "path": [
+      "mass_flow"
+     ],
+     "set": {
+      "value": 1075905.0,
+      "unit": "kg/h",
+      "assumed": "13,810.09 kmol/h (report) x 77.9075 kg/kmol (reconstructed composition)"
+     }
+    }
+   ]
+  }
+ ],
+ "reproduce": {
+  "expected": {
+   "NRTL": 217700000.0,
+   "Peng-Robinson": 205400000.0,
+   "SRK": 210300000.0
+  },
+  "rel_tol": 0.01,
+  "source": "hand run on the real DWSIM server, docs/MODEL_SCENARIOS.md result table (2026-11-20), 4 digits"
+ },
+ "review": {
+  "method": "mole balance on the mixer feeds for propylene; reported duty equals the stream-table enthalpy rise to 3 digits; package sweep",
+  "human": false
+ },
+ "status": "built"
+}

@@ -1,0 +1,934 @@
+import copy, json, os, shutil, tempfile, unittest
+from unittest import mock
+from hysys_bridge import mcp_server as M
+from hysys_bridge.casebook import schema, runner, ledger, diagnose
+from hysys_bridge.dwsim.fake import FakeDwsim
+from hysys_bridge.dwsim.backend import DwsimBackend
+
+CASE = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "cumene-alkylator-feed-heater.json")
+MIXER = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-mixer-tutorial.json")
+FLASH = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-ethanol-flash-drum-tutorial.json")
+HEATCOOL = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-heater-cooler-tutorial.json")
+CONDENSER = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "steam-condenser-cooler-independent.json")
+LOOP = os.path.join(os.path.dirname(__file__), "..", "..", "studies", "cases", "water-recycle-loop-tutorial.json")
+
+
+def call(tool, **args):
+    r = M.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})["result"]
+    t = r["content"][0]["text"]; return r["isError"], (t if r["isError"] else json.loads(t))
+
+
+class EnthalpyFake(FakeDwsim):
+    """FakeDwsim with an invented but deterministic enthalpy h = 1*T kJ/kg, so duty = (Tout - Tin) * mass: plumbing test only."""
+    def call(self, tool, args):
+        r = super().call(tool, args)
+        if tool == "dwsim_stream_get_results":
+            kg_s = r["mass_flow_kg_s"] or self.objects["TO_HEATER"]["mass_flow_kg_s"]; r["mass_flow_kg_s"] = kg_s
+            r["phases"] = [{"name": "Mixture", "enthalpy_kJ_kg": 1.0 * (r["temperature_K"] - 273.15), "compounds": {}}, {"name": "Vapor", "fraction": 0.0}]
+        return r
+
+
+class FakeTransport:
+    def __init__(self): self.fake = EnthalpyFake()
+    def call(self, tool, args): return self.fake.call(tool, args)
+    def close(self): pass
+
+
+def case(): return schema.load(CASE)
+
+
+class Schema(unittest.TestCase):
+    def test_the_real_case_is_valid_and_buildable(self):
+        c = case(); self.assertEqual(schema.validate(c), []); self.assertTrue(schema.capability(c)["buildable"])
+
+    def planted(self, mutate, needle, n=1):
+        c = case(); mutate(c); probs = schema.validate(c)
+        self.assertTrue(any(needle in x for x in probs), (needle, probs))
+        self.assertEqual(len(probs), n, probs)                       # the fault is reported once, not once per scenario, and nothing else breaks
+
+    def test_each_planted_fault_is_caught(self):
+        feed = lambda c: c["streams"][0]
+        self.planted(lambda c: feed(c)["T"].pop("anchor"), "anchor")
+        self.planted(lambda c: feed(c)["P"].pop("basis"), "P.basis")
+        self.planted(lambda c: feed(c)["composition"]["values"].update(Benzene=0.5), "sums to")
+        self.planted(lambda c: feed(c)["composition"].pop("check"), "reconstructed")
+        self.planted(lambda c: feed(c)["composition"]["values"].update(Xenon=0.0), "not in basis.compounds", n=2)             # also lacks a provenance entry
+        self.planted(lambda c: c.update(status="verified"), "review.human")
+        self.planted(lambda c: c["reported"][0].update(target="NOPE"), "target")
+        self.planted(lambda c: c["reported"].clear(), "reported is empty")
+        self.planted(lambda c: c["source"].pop("licence"), "source.licence")
+        self.planted(lambda c: c["basis"].pop("molar_mass_g_mol"), "molar_mass_g_mol")
+        self.planted(lambda c: c["scenarios"][0].pop("why"), "why")
+        self.planted(lambda c: c["scenarios"][0]["overrides"][0].update(path=["composition", "nope"]), "override path")
+        self.planted(lambda c: c["scenarios"][0]["overrides"][0].update(set={"Propylene": 0.5, "Benzene": 0.2}), "sums to")
+        self.planted(lambda c: c["tolerance"].update(pass_rel=0), "pass_rel")
+        self.planted(lambda c: c.update(reproduce={"expected": {"Bogus": 1}, "rel_tol": 0.1, "source": "x"}), "reproduce")
+
+    def test_structural_faults(self):
+        feed = lambda c: c["streams"][0]
+        self.planted(lambda c: c.pop("units"), "missing 'units'")
+        self.planted(lambda c: c["source"].pop("url"), "or a local_copy")
+        self.planted(lambda c: c["source"].update(read="skimmed"), "source.read")
+        self.planted(lambda c: c["basis"].update(packages=[]), "basis.packages", n=2)                                   # also breaks the reproduce check
+        self.planted(lambda c: c.update(status="finished"), "status must be")
+        self.planted(lambda c: c.pop("review"), "review.method")
+        self.planted(lambda c: c["units"][0].update(type="teleporter"), "unknown")
+        self.planted(lambda c: c["units"].append(dict(c["units"][0])), "duplicated")
+        self.planted(lambda c: c["streams"].append(dict(c["streams"][1])), "duplicated")
+        self.planted(lambda c: c["streams"][1].update(role="heap"), "role must be")
+        self.planted(lambda c: feed(c).update(src="HE100"), "a feed has no src")
+        self.planted(lambda c: c["streams"][1].update(dst="HE100"), "a product has no dst")
+        self.planted(lambda c: c["streams"][1].update(src="HE999"), "is not a unit")
+        self.planted(lambda c: feed(c)["T"].update(value="hot"), "numeric value")
+        self.planted(lambda c: feed(c)["T"].update(unit="F"), "unit 'F'")
+        self.planted(lambda c: feed(c)["composition"]["provenance"].update(Benzene="guessed"), "must be reported, assumed or reconstructed")
+        self.planted(lambda c: feed(c)["composition"]["provenance"].pop("Benzene"), "must cover every compound")
+        self.planted(lambda c: c["reported"].append(dict(c["reported"][0])), "duplicated")
+        self.planted(lambda c: c["reported"][0].update(kind="duty"), "kind must be")
+        self.planted(lambda c: c["reported"].append({**c["reported"][0], "name": "t_out", "kind": "stream_T_C", "unit": "C", "target": "HE100"}), "must be a stream id")
+        self.planted(lambda c: c["scenarios"].append(dict(c["scenarios"][0])), "id missing, duplicated or 'base'", n=1)
+        self.planted(lambda c: c["scenarios"][0].update(id="base"), "id missing, duplicated or 'base'")
+        self.planted(lambda c: c["scenarios"][0].update(overrides=[]), "overrides is empty")
+
+    def test_flowsheet_conversion(self):
+        fs = schema.to_flowsheet(case(), "SRK")
+        self.assertAlmostEqual(fs.streams["TO_HEATER"].P_kPa, (34.38675 + 1.01325) * 100)                 # gauge -> absolute
+        self.assertAlmostEqual(sum(fs.streams["TO_HEATER"].composition.values()), 1.0)                      # mass fractions sum to 1
+        self.assertAlmostEqual(fs.streams["TO_HEATER"].composition["Propylene"], 0.00574 * 42.081 / (0.00574 * 42.081 + 0.99426 * 78.114), places=9)
+        self.assertEqual(fs.units["HE100"].inlets, ["TO_HEATER"]); self.assertEqual(fs.units["HE100"].outlets, ["TO_ALKYLATOR"])
+
+    def test_scenarios_change_only_what_they_say(self):
+        c = case(); s = schema.apply_scenario(c, "mass-from-mole-flow")
+        self.assertNotEqual(s["streams"][0]["mass_flow"]["value"], c["streams"][0]["mass_flow"]["value"]); self.assertEqual(s["streams"][0]["T"], c["streams"][0]["T"])
+        self.assertAlmostEqual(s["streams"][0]["mass_flow"]["value"] / c["streams"][0]["mass_flow"]["value"] - 1, 0.0040, delta=0.0005)    # the documented 0.4%
+        self.assertEqual(schema.apply_scenario(c, "base"), c); self.assertIsNot(schema.apply_scenario(c, "base"), c)
+        with self.assertRaises(KeyError): schema.apply_scenario(c, "nope")
+
+    def test_capability_blocks_unverified_units(self):
+        c = case(); c["units"][0]["type"] = "column"; self.assertEqual(schema.capability(c), {"buildable": False, "unverified_unit_types": ["column"]})
+        self.assertFalse(runner.run_case(c, FakeTransport)["ran"])
+
+
+class Runner(unittest.TestCase):
+    def test_runs_every_scenario_and_package_and_compares(self):
+        c = case(); run = runner.run_case(c, FakeTransport)
+        self.assertEqual(len(run["results"]), 9); self.assertTrue(all(o["solved"] for o in run["results"]))
+        v = run["results"][0]["values"]["heater_duty"]; want = (170.0 - 72.429121) * 1071616.0                 # fake enthalpy: 1 kJ/kg/K
+        self.assertAlmostEqual(v["simulated"], want, delta=1e-6 * want); self.assertAlmostEqual(v["rel_err"], want / 210583600.9 - 1)
+        self.assertFalse(v["within_tol"]); self.assertFalse(run["all_within_tol"])                             # 1 kJ/kg/K is about half of the real duty: the comparison must say so
+
+    def test_compare_edges(self):
+        self.assertTrue(runner.compare(100.0, 104.9, 0.05)["within_tol"]); self.assertFalse(runner.compare(100.0, 105.1, 0.05)["within_tol"])
+        self.assertIsNone(runner.compare(0.0, 1.0, 0.05)["rel_err"]); self.assertFalse(runner.compare(0.0, 1.0, 0.05)["within_tol"])
+
+    def test_reproduce_counts_matches(self):
+        c = case(); run = runner.run_case(c, FakeTransport, scenarios=["base"])
+        self.assertEqual(runner.reproduce(c, run), {"matched": 0, "of": 3, "solved": 3, "total": 3})            # fake numbers do not match the recorded hand run
+        sim = run["results"][0]["values"]["heater_duty"]["simulated"]
+        c2 = copy.deepcopy(c); c2["reproduce"]["expected"] = {"NRTL": sim, "Peng-Robinson": sim, "SRK": sim}
+        self.assertEqual(runner.reproduce(c2, run)["matched"], 3)
+
+    def test_reproduce_uses_the_tolerance(self):
+        c = case(); run = runner.run_case(c, FakeTransport, scenarios=["base"]); sim = run["results"][0]["values"]["heater_duty"]["simulated"]
+        c["reproduce"]["rel_tol"] = 0.01
+        c["reproduce"]["expected"] = {"NRTL": sim * 1.005, "Peng-Robinson": sim * 1.02, "SRK": sim * 0.995}
+        self.assertEqual(runner.reproduce(c, run)["matched"], 2)                                                  # within 1%: NRTL and SRK; 2% off: not Peng-Robinson
+
+    def test_package_spread_is_per_scenario(self):
+        slope = {"NRTL": 1.0, "Peng-Robinson (PR)": 1.1, "Soave-Redlich-Kwong (SRK)": 1.05}          # the fake records the server's full package names
+        class PkgFake(EnthalpyFake):
+            def call(self, tool, args):
+                r = FakeDwsim.call(self, tool, args)
+                if tool == "dwsim_stream_get_results":
+                    kg_s = r["mass_flow_kg_s"] or self.objects["TO_HEATER"]["mass_flow_kg_s"]; r["mass_flow_kg_s"] = kg_s
+                    r["phases"] = [{"name": "Mixture", "enthalpy_kJ_kg": slope[self.package] * (r["temperature_K"] - 273.15), "compounds": {}}, {"name": "Vapor", "fraction": 0.0}]
+                return r
+        class T(FakeTransport):
+            def __init__(self): self.fake = PkgFake()
+        c = case(); run = runner.run_case(c, T); dT = 170.0 - 72.429121
+        want = lambda m: 0.1 * dT * m / 210583600.9                                                                # (1.1 - 1.0) * dT * mass / reported
+        sp = run["package_spread_rel"]; m_mole = c["scenarios"][1]["overrides"][0]["set"]["value"]
+        self.assertAlmostEqual(sp["base"]["heater_duty"], want(1071616.0), places=9)
+        self.assertAlmostEqual(sp["mass-from-mole-flow"]["heater_duty"], want(m_mole), places=9)                  # pooled across scenarios it would be larger
+
+    def test_unknown_package_or_scenario_refused(self):
+        with self.assertRaises(ValueError): runner.run_case(case(), FakeTransport, packages=["Bogus"])
+        with self.assertRaises(ValueError): runner.run_case(case(), FakeTransport, scenarios=["Bogus"])
+
+    def test_no_dwsim_command_is_a_clear_error(self):
+        with mock.patch.dict(os.environ): 
+            os.environ.pop("DWSIM_MCP_CMD", None)
+            with self.assertRaises(RuntimeError) as e: runner.default_transport()
+        self.assertIn("DWSIM_MCP_CMD", str(e.exception))
+
+
+BLOCKER = {"code": "STREAM_DANGLING", "severity": "blocker", "object": "X", "message": "m", "fix": "Connect it."}
+WARNING = {"code": "UNIT_HAD_NO_EFFECT", "severity": "warning", "object": "HE100", "message": "m", "fix": "Check the mode."}
+
+
+def transport_with(check=None, solve=None):
+    """EnthalpyFake whose check and solve answers carry the given findings (the real server returned ok=true on a solve with a blocker finding)."""
+    class F(EnthalpyFake):
+        def call(self, tool, args):
+            r = super().call(tool, args)
+            if tool == "dwsim_flowsheet_check" and check is not None: r = {**r, "findings": check, "blockers": sum(f["severity"] == "blocker" for f in check)}
+            if tool == "dwsim_solve_run" and solve is not None: r = {**r, "findings": solve}
+            return r
+    class T(FakeTransport):
+        def __init__(self): self.fake = F()
+    return T
+
+
+class Findings(unittest.TestCase):
+    def run1(self, T):
+        return runner.run_case(case(), T, packages=["SRK"], scenarios=["base"])["results"][0]
+
+    def test_check_blocker_stops_the_solve_and_names_the_next_step(self):
+        o = self.run1(transport_with(check=[BLOCKER]))
+        self.assertFalse(o["solved"]); self.assertEqual(o["why"]["blocked"], "flowsheet check reports blockers")
+        self.assertEqual(o["findings"][0]["category"], "case_error"); self.assertIn("Never change a published number", o["next_step"])
+
+    def test_ok_true_with_a_blocker_finding_is_not_solved(self):
+        o = self.run1(transport_with(solve=[BLOCKER]))
+        self.assertFalse(o["solved"]); self.assertEqual(o["why"]["blocked"], "solve reported blocker findings"); self.assertTrue(o["why"]["findings"])
+
+    def test_warnings_are_kept_on_a_solved_run_and_reach_the_ledger(self):
+        run = runner.run_case(case(), transport_with(solve=[WARNING]), packages=["SRK"], scenarios=["base"]); o = run["results"][0]
+        self.assertTrue(o["solved"]); self.assertEqual([f["category"] for f in o["findings"]], ["backend_mapping"])
+        self.assertEqual(runner.ledger_rows(run)[0]["findings"], ["UNIT_HAD_NO_EFFECT:warning:HE100"])
+
+    def test_clean_run_has_no_findings(self):
+        self.assertEqual(self.run1(FakeTransport)["findings"], [])
+
+
+class Diagnose(unittest.TestCase):
+    def test_every_code_is_classified_once(self):
+        allc = [c for _, codes in (diagnose.CASE_ERROR, diagnose.BACKEND, diagnose.PLAUSIBILITY, diagnose.CONVERGENCE) for c in codes]
+        self.assertEqual(len(allc), len(set(allc)))
+        self.assertEqual(diagnose.CATEGORY["FEED_NO_FLOW"][0], "case_error"); self.assertEqual(diagnose.CATEGORY["EFFICIENCY_OUT_OF_RANGE"][0], "backend_mapping")
+        self.assertEqual(diagnose.CATEGORY["HX_TEMPERATURE_CROSS"][0], "plausibility"); self.assertEqual(diagnose.CATEGORY["RECYCLE_NO_ESTIMATE"][0], "convergence"); self.assertEqual(diagnose.CATEGORY["NEGATIVE_FLOW"][0], "plausibility")
+
+    def test_unknown_code_is_flagged_not_guessed(self):
+        c = diagnose.classify([{"code": "NEW_CODE_2027", "severity": "warning", "object": "A"}])[0]
+        self.assertEqual(c["category"], "unclassified"); self.assertIn("add it to this table", c["loop_action"])
+
+    def test_next_step_prefers_blockers_then_what_we_can_fix(self):
+        mk = lambda code, sev: {"code": code, "severity": sev, "object": "o"}
+        cl = diagnose.classify([mk("HEATER_COOLED", "warning"), mk("UNIT_HAD_NO_EFFECT", "warning"), mk("SPEC_MISSING", "warning")])
+        self.assertEqual(diagnose.next_step(cl), diagnose.CASE_ERROR[0])                                              # case error beats backend mapping beats plausibility
+        cl = diagnose.classify([mk("SPEC_MISSING", "warning"), mk("RECYCLE_NO_ESTIMATE", "blocker")])
+        self.assertEqual(diagnose.next_step(cl), diagnose.CONVERGENCE[0])                                                      # a blocker beats a warning
+        self.assertIsNone(diagnose.next_step([]))
+
+
+class LoopFake(FakeDwsim):
+    """Stand-in that solves the tutorial loop in closed form from the split ratio the backend sent (SR1): fresh 1 kg/s, mixed = fresh / r, recycle = mixed * (1 - r).
+    If the ratio never arrives it answers with 0.5, so a backend that drops the parameter fails the non-base scenarios."""
+    honour = True
+    def call(self, tool, args):
+        r = super().call(tool, args)
+        if tool == "dwsim_stream_get_results":
+            ratio = self.params.get("SP", {}).get("SR1", 0.5) if self.honour else 0.5; k = {"FRESH": 1.0, "PRODUCT": 1.0, "MIXED": 1 / ratio, "HEATED": 1 / ratio, "RECYCLE": (1 - ratio) / ratio, "RETURN": (1 - ratio) / ratio}[args["name"]]
+            r = {**r, "mass_flow_kg_s": k, "phases": []}
+        return r
+
+
+class LoopTransport(FakeTransport):
+    def __init__(self): self.fake = LoopFake()
+
+
+class Recycle(unittest.TestCase):
+    def loop(self): return schema.load(LOOP)
+
+    def test_case_is_valid_and_computed_streams_need_no_t_and_p(self):
+        c = self.loop(); self.assertEqual(schema.validate(c), []); self.assertTrue(schema.capability(c)["buildable"])
+        fs = schema.to_flowsheet(c, "Steam Tables")
+        self.assertIsNone(fs.streams["MIXED"].T_C); self.assertIsNone(fs.streams["MIXED"].P_kPa)
+        self.assertAlmostEqual(fs.streams["HEATED"].T_C, 76.85); self.assertAlmostEqual(fs.streams["HEATED"].P_kPa, 101.325)       # heater outlet carries the spec
+        self.assertEqual(fs.units["SP"].params, {"split_ratio": 0.7}); self.assertEqual(fs.units["RC"].inlets, ["RECYCLE"]); self.assertEqual(fs.units["RC"].outlets, ["RETURN"])
+        self.assertEqual(sorted(fs.units["MIX"].inlets), ["FRESH", "RETURN"])
+
+    def test_the_analytic_values_are_consistent(self):
+        c = self.loop(); r = {x["name"]: x["value"] for x in c["reported"]}
+        self.assertAlmostEqual(r["mixed_flow"], r["product_flow"] / 0.7, places=3); self.assertAlmostEqual(r["recycle_flow"], r["mixed_flow"] * 0.3, places=3)
+        for sc in c["scenarios"]:                                                                                  # each scenario's expectation follows its own ratio
+            q = {x["name"]: x["value"] for x in schema.apply_scenario(c, sc["id"])["reported"]}; ratio = schema.apply_scenario(c, sc["id"])["units"][2]["params"]["split_ratio"]
+            self.assertAlmostEqual(q["mixed_flow"], 3600.0 / ratio, places=3); self.assertAlmostEqual(q["recycle_flow"], q["mixed_flow"] * (1 - ratio), places=3)
+
+    def planted(self, mutate, needle):
+        c = self.loop(); mutate(c); probs = schema.validate(c); self.assertTrue(any(needle in x for x in probs), (needle, probs))
+
+    def test_planted_faults(self):
+        self.planted(lambda c: c["units"][0].update(params={"split_ratio": 0.5}), "split_ratio")                 # on a mixer
+        self.planted(lambda c: c["units"][2]["params"].update(split_ratio=1.5), "split_ratio")
+        self.planted(lambda c: c["scenarios"][0]["overrides"][1].update(reported="nope"), "override path")
+        self.planted(lambda c: c["streams"][2].pop("T"), "streams[HEATED].T")                                      # heater outlet needs T and P
+
+    def test_backend_sends_the_split_ratio_and_adds_a_recycle(self):
+        t = LoopTransport(); run = runner.run_case(self.loop(), lambda: t, packages=["Steam Tables"], scenarios=["base"])
+        sets = [(a["name"], a["properties"]) for tool, a in t.fake.calls if tool == "dwsim_unitop_set"]
+        self.assertIn(("SP", {"OperationMode": "SplitRatios", "SR1": 0.7}), sets)
+        self.assertEqual([a["type"] for tool, a in t.fake.calls if tool == "dwsim_unitop_add"], ["Mixer", "Heater", "Splitter", "Recycle"])
+        self.assertTrue(run["results"][0]["solved"])
+
+    def test_every_scenario_matches_the_closed_form(self):
+        run = runner.run_case(self.loop(), LoopTransport); self.assertEqual(len(run["results"]), 8)
+        self.assertTrue(run["all_within_tol"], [(o["scenario"], {k: v["rel_err"] for k, v in o["values"].items()}) for o in run["results"]])
+
+    def test_a_backend_that_drops_the_ratio_is_caught(self):
+        class Deaf(LoopTransport):
+            def __init__(self): self.fake = LoopFake(); self.fake.honour = False
+        run = runner.run_case(self.loop(), Deaf, packages=["Steam Tables"])
+        within = {o["scenario"]: all(v["within_tol"] for v in o["values"].values()) for o in run["results"]}
+        self.assertFalse(within["base"]); self.assertTrue(within["split-0.5"])                                    # only the scenario that happens to equal the default passes
+        self.assertFalse(run["all_within_tol"])
+
+
+class FlashFake(FakeDwsim):
+    """Water/ethanol flash drum in closed form from the heater outlet temperature: vapour (mole) fraction 0 up to 350 K, 0.55 at 360 K, 1 from 370 K, with 0.64 of the mass in the vapour; vapour carries 0.66
+    ethanol, liquid 0.22 (the tutorial's rounded values). The separator's first outlet port gets the vapour, the second the liquid, like the real Vessel."""
+    swap = False
+    def call(self, tool, args):
+        r = super().call(tool, args)
+        if tool == "dwsim_stream_get_results":
+            t = self.params.get("H", {}).get("OutletTemperature", 360.0); vf = 0.0 if t <= 350 else 1.0 if t >= 370 else 0.55; mshare = 0.0 if t <= 350 else 1.0 if t >= 370 else 0.64; n = args["name"]
+            port = {"V": None}; sep = self.ports.get("SEP", {})
+            idx = sep.get(n, ("", None))[1] if sep.get(n, ("",))[0] == "product_stream" else None
+            if idx is not None and self.swap: idx = 1 - idx
+            mass, x_et = {"FEED": (1.0, 0.5), "TWO_PHASE": (1.0, 0.5)}.get(n, (None, None))
+            if idx == 0: mass, x_et = mshare, 0.66 if vf else 0.5
+            if idx == 1: mass, x_et = 1 - mshare, 0.22 if vf < 1 else 0.5
+            r = {**r, "mass_flow_kg_s": mass, "phases": [{"name": "Mixture", "enthalpy_kJ_kg": 0.0, "compounds": {"Water": {"mass_fraction": 1 - x_et}, "Ethanol": {"mass_fraction": x_et}}}, {"name": "Vapor", "fraction": vf if n in ("TWO_PHASE",) else (1.0 if idx == 0 else 0.0)}]}
+        return r
+
+
+class FlashTransport(FakeTransport):
+    swap = False
+    def __init__(self): self.fake = FlashFake(); self.fake.swap = self.swap
+
+
+class SwappedFlash(FlashTransport):
+    swap = True
+
+
+class RangesAndFlash(unittest.TestCase):
+    def flash(self): return schema.load(FLASH)
+
+    def test_cases_are_valid(self):
+        for f in (MIXER, FLASH): self.assertEqual(schema.validate(schema.load(f)), [], f)
+
+    def planted(self, mutate, needle, base=None):
+        c = (base or self.flash)(); mutate(c); probs = schema.validate(c); self.assertTrue(any(needle in x for x in probs), (needle, probs))
+
+    def test_range_and_new_kind_faults(self):
+        self.planted(lambda c: c["reported"][0].update(range=[0.8, 0.4]), "range must be")
+        self.planted(lambda c: c["reported"][0].update(range=[0.4]), "range must be")
+        self.planted(lambda c: c["reported"][0].update(unit="kg/h"), "unit")
+        self.planted(lambda c: c["reported"][0].pop("anchor"), "anchor")
+        self.planted(lambda c: c["reported"][5].update(targets=["VAPOR", "NOPE"]), "targets must be")
+        self.planted(lambda c: c["reported"][3].update(compound="Xenon"), "compound must be")
+        self.planted(lambda c: c["reported"][6].update(pass_rel=2), "pass_rel")
+        self.planted(lambda c: c["scenarios"][0].update(drop_reported="vapor_mass_flow"), "drop_reported")
+        self.planted(lambda c: c["streams"].reverse(), "'vapor' then 'liquid'")                                      # file order decides the Vessel's ports
+        self.planted(lambda c: c["streams"][2].update(phase="liquid"), "'vapor' then 'liquid'")
+
+    def test_compare_item(self):
+        r = {"range": [0.4, 0.8]}; self.assertTrue(runner.compare_item(r, 0.4, 0.05)["within_tol"]); self.assertTrue(runner.compare_item(r, 0.8, 0.05)["within_tol"])
+        self.assertFalse(runner.compare_item(r, 0.801, 0.05)["within_tol"]); self.assertFalse(runner.compare_item(r, 0.399, 0.05)["within_tol"])
+        self.assertIsNone(runner.compare_item(r, 0.5, 0.05)["rel_err"])
+        p = {"value": 100.0, "pass_rel": 0.01}; self.assertTrue(runner.compare_item(p, 100.9, 0.5)["within_tol"]); self.assertFalse(runner.compare_item(p, 101.1, 0.5)["within_tol"])   # own tolerance beats the default
+        self.assertTrue(runner.compare_item({"value": 100.0}, 104.0, 0.05)["within_tol"])                                                                                       # default applies
+
+    def test_drop_reported_removes_only_what_it_names(self):
+        c = self.flash(); sc = schema.apply_scenario(c, "below-bubble-point"); names = {r["name"] for r in sc["reported"]}; base = {r["name"] for r in c["reported"]}
+        self.assertEqual(base - names, {"vapor_ethanol_fraction_enriched", "liquid_ethanol_fraction_depleted", "vapor_mass_flow_approx", "liquid_mass_flow_approx", "vapor_ethanol_fraction_approx", "liquid_ethanol_fraction_approx"})
+        self.assertEqual(sc["scenarios"], []); self.assertEqual(schema.validate(sc), [])                              # an applied scenario is a plain case
+        self.assertEqual(next(r for r in sc["reported"] if r["name"] == "two_phase_vapor_fraction")["range"], [0.0, 0.001])
+
+    def test_flash_runs_every_scenario_and_passes_the_paper_package(self):
+        run = runner.run_case(self.flash(), FlashTransport, packages=["NRTL"])
+        self.assertEqual(len(run["results"]), 3); self.assertTrue(run["all_within_tol"], [(o["scenario"], {k: v for k, v in o["values"].items() if not v["within_tol"]}) for o in run["results"]])
+        self.assertTrue(run["paper_package_within_tol"])
+
+    def test_swapped_separator_ports_are_caught(self):
+        run = runner.run_case(self.flash(), SwappedFlash, packages=["NRTL"]); self.assertFalse(run["all_within_tol"])
+        bad = {k for o in run["results"] if o["scenario"] == "base" for k, v in o["values"].items() if not v["within_tol"]}
+        self.assertIn("vapor_mass_flow_approx", bad); self.assertIn("vapor_ethanol_fraction_enriched", bad)
+
+    def test_paper_package_is_reported_separately(self):
+        class Biased(FlashTransport):                                                                               # every package other than NRTL gets a wrong answer
+            def __init__(self):
+                super().__init__(); f = self.fake; orig = f.call
+                def call(tool, args):
+                    r = orig(tool, args)
+                    if tool == "dwsim_stream_get_results" and f.package != "NRTL" and args["name"] == "VAPOR": r = {**r, "mass_flow_kg_s": r["mass_flow_kg_s"] * 1.3}
+                    return r
+                f.call = call
+        run = runner.run_case(self.flash(), Biased, scenarios=["base"])
+        self.assertTrue(run["paper_package_within_tol"]); self.assertFalse(run["all_within_tol"])
+
+    def test_mixer_case_values_and_a_wrong_temperature_is_caught(self):
+        m = schema.load(MIXER); r = {x["name"]: x for x in m["reported"]}
+        self.assertEqual(r["outlet_mass"]["value"], 540000.0); self.assertAlmostEqual(r["outlet_T"]["value"], 316.0141 - 273.15, places=4)
+        s = {x["name"]: x["value"] for x in schema.apply_scenario(m, "equal-flows")["reported"] if "value" in x}; self.assertEqual(s["outlet_mass"], 720000.0)
+        for sid in ("flows-swapped", "equal-flows"):
+            fs = schema.to_flowsheet(schema.apply_scenario(m, sid), "SRK"); self.assertEqual(fs.streams["OUTLET"].P_kPa, None)
+        self.assertAlmostEqual(schema.to_flowsheet(schema.apply_scenario(m, "flows-swapped"), "SRK").streams["INLET_1"].mass_flow_kg_h, 180000.0)
+
+
+class DutyFake(EnthalpyFake):
+    """Enthalpy h = T kJ/kg (any stream), mass flow of derived streams = the feed's. Heater and cooler duties are then (T_out - T_in) x mass, mirror images of each other."""
+    def call(self, tool, args):
+        r = FakeDwsim.call(self, tool, args)
+        if tool == "dwsim_stream_get_results":
+            kg_s = r["mass_flow_kg_s"] or next(o["mass_flow_kg_s"] for o in self.objects.values() if o.get("mass_flow_kg_s"))
+            r = {**r, "mass_flow_kg_s": kg_s, "phases": [{"name": "Mixture", "enthalpy_kJ_kg": r["temperature_K"] - 273.15, "compounds": {}}, {"name": "Vapor", "fraction": 0.0}]}
+        return r
+
+
+class DutyTransport(FakeTransport):
+    def __init__(self): self.fake = DutyFake()
+
+
+class HeaterCooler(unittest.TestCase):
+    def hc(self): return schema.load(HEATCOOL)
+
+    def test_cases_are_valid_and_independent_values_are_consistent(self):
+        for f in (HEATCOOL, CONDENSER): self.assertEqual(schema.validate(schema.load(f)), [], f)
+        c = self.hc(); r = {x["name"]: x["value"] for x in c["reported"] if "value" in x}
+        self.assertAlmostEqual(r["heater_duty"], -r["cooler_duty"], places=3); self.assertAlmostEqual(r["heater_duty"] / 3600, 230.135, places=2)       # kW, against the tutorial's ~230
+        self.assertEqual(schema.load(CONDENSER)["source"]["read"], "computed")
+        flow2 = {x["name"]: x["value"] for x in schema.apply_scenario(c, "flow-2-kg-s")["reported"] if "value" in x}; self.assertAlmostEqual(flow2["heater_duty"], 2 * r["heater_duty"], delta=1.0)
+        dp = {x["name"]: x for x in schema.apply_scenario(c, "pressure-drop-100kPa")["reported"]}; self.assertAlmostEqual(dp["net_duty"]["range"][0] / dp["net_duty"]["range"][1], 340 / 327, places=3)
+        self.assertAlmostEqual(dp["heater_duty"]["value"] + dp["cooler_duty"]["value"], -333.33, delta=0.1)                                                  # the band is around the independent difference
+
+    def test_duty_sum_kind_is_validated(self):
+        c = self.hc(); c["reported"][2]["targets"] = ["H", "NOPE"]; self.assertTrue(any("targets must be" in x for x in schema.validate(c)))
+
+    def test_duties_and_their_sum_come_from_the_stream_enthalpies(self):
+        run = runner.run_case(self.hc(), DutyTransport, packages=["Steam Tables"], scenarios=["base"]); v = run["results"][0]["values"]
+        self.assertAlmostEqual(v["heater_duty"]["simulated"], 55 * 3600.0); self.assertAlmostEqual(v["cooler_duty"]["simulated"], -55 * 3600.0)             # (80 - 25) K x 3600 kg/h at 1 kJ/kg/K
+        self.assertAlmostEqual(v["net_duty"]["simulated"], 0.0); self.assertTrue(v["net_duty"]["within_tol"])
+        self.assertFalse(v["heater_duty"]["within_tol"])                                                                                                      # not the real water enthalpy, so it must not pass
+
+    def test_heater_pressure_drop_reaches_the_server_with_the_right_sign(self):
+        t = DutyTransport(); runner.run_case(self.hc(), lambda: t, packages=["Steam Tables"], scenarios=["pressure-drop-100kPa"])
+        sets = {a["name"]: a["properties"] for tool, a in t.fake.calls if tool == "dwsim_unitop_set"}
+        self.assertEqual(sets["H"]["CalcMode"], "OutletTemperature"); self.assertAlmostEqual(sets["H"]["OutletTemperature"], 353.15); self.assertAlmostEqual(sets["H"]["DeltaP"], 100000.0)   # a drop is positive
+        self.assertAlmostEqual(sets["C"]["DeltaP"], 0.0)
+
+
+FOSSEE = ["methanol-water-mixer-fossee-exp1", "water-heater-raoult-fossee-exp9", "pentane-hexane-heptane-flash-fossee-exp7"]
+def _fossee(i): return schema.load(os.path.join(os.path.dirname(CASE), i + ".json"))
+
+
+class Fossee(unittest.TestCase):
+    """Cases built from the FOSSEE DWSIM manual (Exp 1, 7, 9). The manual's results are images, so every reference is an independent calculation; these tests check the case records themselves."""
+    def test_all_validate_and_cite_the_manual(self):
+        for i in FOSSEE:
+            c = _fossee(i); self.assertEqual(schema.validate(c), [], i)
+            self.assertIn("fossee.in", c["source"]["url"]); self.assertEqual(c["basis"]["package_in_paper"], "Raoult's Law"); self.assertFalse(c["review"]["human"])
+
+    def test_mixer_reference_is_the_mole_balance(self):
+        c = _fossee(FOSSEE[0]); mm = c["basis"]["molar_mass_g_mol"]; f = {s["id"]: s for s in c["streams"]}
+        kmol = lambda s: s["mass_flow"]["value"] / sum(x * mm[k] for k, x in s["composition"]["values"].items())
+        self.assertAlmostEqual(kmol(f["INLET_1"]), 20, delta=1e-3); self.assertAlmostEqual(kmol(f["INLET_2"]), 10, delta=1e-3)
+        r = {x["name"]: x["value"] for x in c["reported"]}
+        self.assertAlmostEqual(r["outlet_mass"], f["INLET_1"]["mass_flow"]["value"] + f["INLET_2"]["mass_flow"]["value"], delta=1e-3)
+        self.assertAlmostEqual(r["outlet_methanol_mass_fraction"], 10 * mm["Methanol"] / r["outlet_mass"], places=5)
+
+    def test_flash_reference_satisfies_its_own_balances(self):
+        c = _fossee(FOSSEE[2]); r = {x["name"]: x["value"] for x in c["reported"]}; mm = c["basis"]["molar_mass_g_mol"]
+        self.assertAlmostEqual(r["vapor_mass_flow"] + r["liquid_mass_flow"], r["outlet_mass_sum"], delta=0.05)     # a transcription slip in either flow breaks this
+        z = c["streams"][0]["composition"]["values"]; ideal = 100 * sum(x * mm[k] for k, x in z.items())
+        self.assertAlmostEqual(c["streams"][0]["mass_flow"]["value"], ideal, delta=0.01)
+        wf = z["N-pentane"] * mm["N-pentane"] / sum(x * mm[k] for k, x in z.items())     # component balance on pentane
+        self.assertAlmostEqual(r["vapor_pentane_mass_fraction"] * r["vapor_mass_flow"] + r["liquid_pentane_mass_fraction"] * r["liquid_mass_flow"], wf * r["outlet_mass_sum"], delta=2.0)
+
+    def test_flash_scenarios_cover_dew_and_bubble(self):
+        c = _fossee(FOSSEE[2])
+        for sid, field, value in (("below-dew-pressure", "P", 70.0), ("above-dew-temperature", "T", 80.0), ("above-bubble-pressure", "P", 140.0)):
+            s = schema.apply_scenario(c, sid); self.assertEqual(schema.validate(s), [], sid); self.assertEqual(s["streams"][0][field]["value"], value)
+
+    def test_heater_tolerance_was_fixed_before_the_run(self):
+        c = _fossee(FOSSEE[1]); self.assertEqual(c["tolerance"]["pass_rel"], 0.01); self.assertIn("fixed before the run", c["tolerance"]["note"])
+
+
+REACTOR = os.path.join(os.path.dirname(CASE), "ammonia-conversion-reactor-fossee-exp5.json")
+
+
+class ReactorFake(FakeDwsim):
+    """Applies the stoichiometry and conversion that the backend sent to add_conversion: a stand-in for the server's ConversionReactor (plumbing, not thermodynamics)."""
+    MM = {"Nitrogen": 28.0134, "Hydrogen": 2.01588, "Ammonia": 17.03052}
+    def call(self, tool, args):
+        r = super().call(tool, args)
+        if tool != "dwsim_stream_get_results": return r
+        n, feed = args["name"], self.objects["FEED"]
+        if n == "FEED": return {**r, "phases": [{"name": "Mixture", "enthalpy_kJ_kg": 0.0, "compounds": {c: {"mass_fraction": x} for c, x in feed["composition"].items()}}, {"name": "Vapor", "fraction": 1.0}]}
+        mol = {c: feed["composition"][c] / self.MM[c] for c in self.MM}                                  # per kg of feed
+        rx = next(iter(self.reactions.values())); nu = rx["stoichiometry"]; xi = float(rx["conversion"]) / 100 * mol[rx["base_compound"]] / -nu[rx["base_compound"]]
+        out = {c: mol[c] + nu.get(c, 0) * xi for c in mol}; m = {c: out[c] * self.MM[c] for c in out}; tot = sum(m.values())
+        port = self.ports["R"][n][1]
+        if port == 1: return {**r, "mass_flow_kg_s": 0.0, "temperature_K": feed["temperature_K"], "pressure_Pa": feed["pressure_Pa"], "phases": [{"name": "Liquid", "fraction": 0.0}]}
+        return {**r, "mass_flow_kg_s": feed["mass_flow_kg_s"], "temperature_K": feed["temperature_K"], "pressure_Pa": feed["pressure_Pa"],
+                "phases": [{"name": "Mixture", "enthalpy_kJ_kg": 0.0, "compounds": {c: {"mass_fraction": m[c] / tot} for c in m}}, {"name": "Vapor", "fraction": 1.0}]}
+
+
+class ReactorTransport(FakeTransport):
+    duty = -127.495
+    def __init__(self): self.fake = ReactorFake(); self.fake.duty_kW = self.duty
+class WrongDutyTransport(ReactorTransport): duty = -100.0
+
+
+class Reactor(unittest.TestCase):
+    def rc(self): return schema.load(REACTOR)
+    def problems(self, mutate):
+        c = self.rc(); mutate(c); return schema.validate(c)
+    def test_case_validates_and_scenarios_apply(self):
+        c = self.rc(); self.assertEqual(schema.validate(c), [])
+        for sid in ("conversion-50", "conversion-10"): self.assertEqual(schema.validate(schema.apply_scenario(c, sid)), [], sid)
+
+    def test_every_reaction_rule_fires(self):
+        rx = lambda c: c["units"][0]["params"]["reaction"]
+        muts = [("reaction is required", lambda c: c["units"][0]["params"].pop("reaction")),
+                ("conserve mass", lambda c: rx(c)["stoichiometry"].update(Hydrogen=-2)),
+                ("base_compound must be a reactant", lambda c: rx(c).update(base_compound="Ammonia")),
+                ("conversion_pct", lambda c: rx(c).update(conversion_pct=0)),
+                ("conversion_pct", lambda c: rx(c).update(conversion_pct=120)),
+                ("phase must be", lambda c: rx(c).update(phase="Gas")),
+                ("thermal_mode", lambda c: c["units"][0]["params"].pop("thermal_mode")),
+                ("not in basis.compounds", lambda c: rx(c)["stoichiometry"].update(Oxygen=1)),
+                ("needs reactants", lambda c: rx(c).update(stoichiometry={"Nitrogen": 1, "Ammonia": 2})),
+                ("needs an anchor", lambda c: rx(c).pop("anchor")),
+                ("molar_mass_g_mol", lambda c: c["basis"].update(molar_mass_g_mol={})),
+                ("at most one reactor", lambda c: c["units"].append({"id": "R2", "type": "conversion_reactor", "params": c["units"][0]["params"]})),
+                ("belongs on a conversion_reactor", lambda c: c["units"].append({"id": "H", "type": "heater", "params": {"reaction": {}}}))]
+        for needle, m in muts: self.assertTrue(any(needle in x for x in self.problems(m)), needle)
+
+    def test_backend_adds_reaction_before_reactor_and_sends_thermal_mode(self):
+        t = ReactorTransport(); run = runner.run_case(self.rc(), transport_factory=lambda: t, packages=["Raoult's Law"], scenarios=["base"])
+        calls = [(tool, a) for tool, a in t.fake.calls]; names = [c[0] for c in calls]
+        self.assertLess(names.index("dwsim_reaction_add_conversion"), names.index("dwsim_unitop_add"))
+        add = next(a for tool, a in calls if tool == "dwsim_reaction_add_conversion")
+        self.assertEqual((add["stoichiometry"], add["base_compound"], add["conversion"], add["phase"]), ({"Nitrogen": -1, "Hydrogen": -3, "Ammonia": 2}, "Nitrogen", "20.0", "Vapor"))
+        self.assertEqual(add["name"], "ammonia-formation")
+        setp = next(a for tool, a in calls if tool == "dwsim_unitop_set" and a["name"] == "R")
+        self.assertEqual(setp["properties"]["ReactorOperationMode"], "Isothermic"); self.assertNotIn("DeltaP", setp["properties"])        # the outlet pressure is not specified, so no pressure drop is sent (DWSIM defaults to 0)
+
+    def test_run_matches_the_mole_balance_and_reads_the_duty(self):
+        run = runner.run_case(self.rc(), transport_factory=ReactorTransport, packages=["Raoult's Law"], scenarios=["base"])
+        self.assertTrue(run["paper_package_within_tol"], run["results"][0]["values"])
+        v = run["results"][0]["values"]; self.assertAlmostEqual(v["reactor_duty"]["simulated"], -127.495 * 3600, delta=1)
+        self.assertAlmostEqual(v["vapor_ammonia_mass_fraction"]["simulated"], 0.2, places=3)
+
+    def test_wrong_duty_in_the_explanation_fails_the_case(self):
+        run = runner.run_case(self.rc(), transport_factory=WrongDutyTransport, packages=["Raoult's Law"], scenarios=["base"])
+        self.assertFalse(run["paper_package_within_tol"]); self.assertFalse(run["results"][0]["values"]["reactor_duty"]["within_tol"])
+
+    def test_unreadable_duty_is_an_error_not_a_default(self):
+        be = DwsimBackend(ReactorTransport()); be.fid = "fs-1"; be.t.fake.duty_kW = "unknown"
+        with self.assertRaises(RuntimeError): be.reactor_duty_kJ_h("R")
+
+
+EQUIL = os.path.join(os.path.dirname(CASE), "water-gas-shift-equilibrium-reactor-fossee-exp4.json")
+
+
+class Equilibrium(unittest.TestCase):
+    def ec(self): return schema.load(EQUIL)
+    def problems(self, mutate):
+        c = self.ec(); mutate(c); return schema.validate(c)
+    def test_validates_and_scenarios_apply(self):
+        c = self.ec(); self.assertEqual(schema.validate(c), [])
+        for sid in ("pressure-2-bar", "1000K-2-bar"): self.assertEqual(schema.validate(schema.apply_scenario(c, sid)), [], sid)
+
+    def test_equilibrium_rules_fire(self):
+        rx = lambda c: c["units"][0]["params"]["reaction"]
+        muts = [("does not belong on an equilibrium", lambda c: rx(c).update(conversion_pct=50)),
+                ("basis must be one of", lambda c: rx(c).update(basis="bananas")),
+                ("must be 'Pa'", lambda c: rx(c).update(units="kPa")),
+                ("lnkeq_expression", lambda c: rx(c).update(lnkeq_expression="")),
+                ("conserve mass", lambda c: rx(c)["stoichiometry"].update(Hydrogen=2))]
+        for needle, m in muts: self.assertTrue(any(needle in x for x in self.problems(m)), needle)
+
+    def test_reference_is_the_stated_equilibrium(self):
+        """The reference mass fractions must satisfy the equilibrium relation with the K the case cites: K = x_CO2 x_H2 / (x_CO x_H2O) in moles."""
+        c = self.ec(); mm = c["basis"]["molar_mass_g_mol"]; r = {x["name"]: x["value"] for x in c["reported"]}
+        n = {k: r["vapor_" + k.split()[-1].lower() + "_mass_fraction"] / mm[k] for k in mm}
+        K = n["Carbon dioxide"] * n["Hydrogen"] / (n["Carbon monoxide"] * n["Water"]); self.assertAlmostEqual(K, 4.2267, delta=0.005)
+        self.assertAlmostEqual(n["Carbon monoxide"], n["Water"], delta=1e-6); self.assertAlmostEqual(n["Carbon dioxide"], n["Hydrogen"], delta=1e-6)
+
+    def test_backend_sends_equilibrium_reaction_before_reactor(self):
+        from hysys_bridge import hysys_writer
+        fake = FakeDwsim(); tr = type("T", (), {"call": lambda s, tool, a: fake.call(tool, a), "close": lambda s: None})()
+        be = DwsimBackend(tr); hysys_writer.write(schema.to_flowsheet(self.ec(), "Raoult's Law"), be); be.solve()
+        names = [tool for tool, _ in fake.calls]; self.assertLess(names.index("dwsim_reaction_add_equilibrium"), names.index("dwsim_unitop_add"))
+        add = next(a for tool, a in fake.calls if tool == "dwsim_reaction_add_equilibrium")
+        self.assertEqual((add["basis"], add["units"], add["phase"], add["base_compound"]), ("partial pressure", "Pa", "Vapor", "Carbon monoxide")); self.assertNotIn("lnkeq_expression", add)
+        self.assertNotIn("dwsim_reaction_add_conversion", names)
+        self.assertEqual(fake.params["R"]["ReactorOperationMode"], "Isothermic")
+
+
+HX = {k: os.path.join(os.path.dirname(CASE), v + ".json") for k, v in (("A", "water-counter-current-exchanger-tutorial"), ("B", "water-exchanger-hot-outlet-specified"), ("C", "toluene-counter-current-exchanger-constructed"))}
+
+
+class Exchanger(unittest.TestCase):
+    def hx(self, k="A"): return schema.load(HX[k])
+    def problems(self, mutate, k="A"):
+        c = self.hx(k); mutate(c); return schema.validate(c)
+    def test_all_validate_and_scenarios_apply(self):
+        for k in HX:
+            c = self.hx(k); self.assertEqual(schema.validate(c), [], k)
+            for sc in c["scenarios"]: self.assertEqual(schema.validate(schema.apply_scenario(c, sc["id"])), [], sc["id"])
+
+    def test_exchanger_rules_fire(self):
+        up = lambda c: c["units"][0]["params"]
+        muts = [("'hot' then 'cold' in file order", lambda c: c["streams"][0].update(side="cold")),
+                ("'hot' then 'cold' in file order", lambda c: c["streams"][3].update(side="hot")),
+                ("params.mode must be", lambda c: up(c).update(mode="LMTD")),
+                ("params.flow must be", lambda c: up(c).update(flow="Crossflow")),
+                ("positive U_W_m2K and area_m2", lambda c: up(c).update(U_W_m2K=0)),
+                ("positive U_W_m2K and area_m2", lambda c: up(c).pop("area_m2")),
+                ("hot_dP_Pa must be", lambda c: up(c).update(hot_dP_Pa=-1)),
+                ("needs an anchor", lambda c: up(c).pop("anchor"))]
+        for needle, m in muts: self.assertTrue(any(needle in x for x in self.problems(m)), needle)
+        self.assertTrue(any("needs the T specification on outlet stream HOT_OUT" in x for x in self.problems(lambda c: c["streams"][2].pop("T"), "B")))
+
+    def test_reference_satisfies_its_own_heat_transfer_equation(self):
+        """Q = UA x LMTD with the case's own reported temperatures (counter-current): a transcription slip in any of them breaks it."""
+        import math
+        c = self.hx("A"); r = {x["name"]: x["value"] for x in c["reported"] if "value" in x}; s = {x["id"]: x for x in c["streams"]}; ua = c["units"][0]["params"]["U_W_m2K"] * c["units"][0]["params"]["area_m2"]
+        d1 = s["HOT_IN"]["T"]["value"] - r["cold_outlet_T"]; d2 = r["hot_outlet_T"] - s["COLD_IN"]["T"]["value"]
+        self.assertAlmostEqual(-r["hot_side_duty"] / 3600 * 1000, ua * (d1 - d2) / math.log(d1 / d2), delta=0.002 * ua * 69)
+
+    def test_backend_sends_the_mode_flow_and_drops(self):
+        from hysys_bridge import hysys_writer
+        for k, want in (("A", {"CalculationMode": "CalcBothTemp_UA", "FlowDir": "CounterCurrent", "OverallCoefficient": 2500.0, "Area": 1.0, "HotSidePressureDrop": 10000.0, "ColdSidePressureDrop": 5000.0}),
+                        ("B", {"CalculationMode": "CalcTempColdOut", "FlowDir": "CounterCurrent", "HotSideOutletTemperature": 353.15, "HotSidePressureDrop": 10000.0, "ColdSidePressureDrop": 5000.0})):
+            fake = FakeDwsim(); tr = type("T", (), {"call": lambda s, tool, a: fake.call(tool, a), "close": lambda s: None})()
+            be = DwsimBackend(tr); hysys_writer.write(schema.to_flowsheet(self.hx(k), "Steam Tables"), be); be.flush()
+            got = fake.params["X"]; self.assertEqual({a: got[a] for a in want}, want, k)
+            ports = fake.ports["X"]; self.assertEqual((ports["HOT_IN"][1], ports["COLD_IN"][1], ports["HOT_OUT"][1], ports["COLD_OUT"][1]), (0, 1, 0, 1))
+        co = schema.apply_scenario(self.hx("A"), "co-current")
+        fake = FakeDwsim(); tr = type("T", (), {"call": lambda s, tool, a: fake.call(tool, a), "close": lambda s: None})()
+        be = DwsimBackend(tr); hysys_writer.write(schema.to_flowsheet(co, "Steam Tables"), be); be.flush(); self.assertEqual(fake.params["X"]["FlowDir"], "CoCurrent")
+
+    def test_co_current_reference_is_less_effective_than_counter_current(self):
+        c = self.hx("A"); co = schema.apply_scenario(c, "co-current"); get = lambda cc: {x["name"]: x["value"] for x in cc["reported"] if "value" in x}
+        self.assertLess(abs(get(co)["hot_side_duty"]), abs(get(c)["hot_side_duty"]))        # same UA, parallel flow transfers less heat
+
+
+from hysys_bridge.casebook import guardrails as G
+
+
+class Guardrails(unittest.TestCase):
+    def case(self):
+        c = schema.load(HX["A"]); c["design_limits"] = {"streams": {"HOT_OUT": {"T_C": {"max": 90.0}, "P_kPa": {"min": 290.0, "max": 300.0}, "anchor": "test limits (synthetic)"}}}; return c
+    def sim(self, hot_out_T=86.1, mass=3600.0):
+        st = lambda T, P, m: {"T": T, "P": P, "mass": m, "mass_fractions": {"Water": 1.0}}
+        return {"HOT_IN": st(126.85, 304.0, 3600.0), "COLD_IN": st(26.85, 101.325, 7200.0), "HOT_OUT": st(hot_out_T, 294.0, mass), "COLD_OUT": st(47.4, 96.3, 7200.0)}
+    def status(self, rows, rule, obj=None): return [r["status"] for r in rows if r["rule"] == rule and (obj is None or r["object"] == obj)]
+
+    def test_registry_provenance_is_stated_for_every_rule(self):
+        R = G.rules()
+        for r in R.values():
+            ts = r["text_status"]
+            if ts == "public-text-read": self.assertTrue(r["read"] and r["source"].startswith("https://www.osha.gov/"), r["id"])
+            elif ts == "paywalled-not-read": self.assertIsNone(r["read"], r["id"])
+            elif ts == "trade-article-read": self.assertTrue(r["read"] and r["sources"] and any(x["how_read"].startswith(("read", "the opening")) for x in r["sources"]), r["id"])
+            elif ts == "forum-snippet-only": self.assertIsNone(r["read"], r["id"]); self.assertTrue(r["sources"] and all("only" in x["how_read"] or "blocked" in x["how_read"] for x in r["sources"]), r["id"])
+            elif ts == "definition": self.assertEqual(r["tier"], "definition")
+            else: self.fail(f"{r['id']}: unknown text_status {ts}")
+            if r.get("tier") == "advisory": self.assertTrue(r["sources"], r["id"])
+        rows = G.evaluate(self.case(), self.sim(), "base")
+        self.assertEqual(self.status(rows, "api-520-521-relief-overpressure"), ["not-evaluated"])      # nothing built in: without supplied numbers the rule does not evaluate
+        for rid in ("forum-vessel-design-pressure-margin", "pump-npsha-vs-npshr", "trade-valve-flashing"): self.assertEqual(self.status(rows, rid), [], rid)      # no equipment declared, no advisory row
+
+    def test_declared_limits_pass_and_violate(self):
+        ok = G.evaluate(self.case(), self.sim(86.1), "base"); self.assertEqual(self.status(ok, "osha-1910.119-d2iD-safe-limits", "HOT_OUT"), ["pass", "pass"])
+        bad = G.evaluate(self.case(), self.sim(91.0), "base"); self.assertEqual(self.status(bad, "osha-1910.119-d2iD-safe-limits", "HOT_OUT"), ["violation", "pass"])
+        low = self.sim(); low["HOT_OUT"]["P"] = 289.0; self.assertEqual(self.status(G.evaluate(self.case(), low, "base"), "osha-1910.119-d2iD-safe-limits", "HOT_OUT"), ["pass", "violation"])
+
+    def test_no_limits_is_reported_not_passed(self):
+        c = schema.load(HX["A"]); rows = G.evaluate(c, self.sim(), "co-current")
+        self.assertEqual(self.status(rows, "osha-1910.119-d2iD-safe-limits"), ["not-evaluated"]); self.assertEqual(self.status(rows, "osha-1910.119-d2iE-deviation-coverage"), ["not-evaluated"])
+        self.assertEqual(self.status(G.evaluate(c, self.sim(), "base"), "osha-1910.119-d2iE-deviation-coverage"), [])        # the base case is not a deviation
+
+    def test_material_balance(self):
+        self.assertEqual(self.status(G.evaluate(self.case(), self.sim(), "base"), "osha-1910.119-d3iG-material-balance"), ["pass"])
+        for dm, want in ((7.0, "pass"), (7200.0 * 0.0005, "pass"), (7200.0 * 0.002, "violation"), (-7200.0 * 0.002, "violation"), (200.0, "violation")):        # 0.1 % is the tool's tolerance, both signs
+            s = self.sim(); s["COLD_OUT"]["mass"] += dm; self.assertEqual(self.status(G.evaluate(self.case(), s, "base"), "osha-1910.119-d3iG-material-balance"), [want], dm)
+
+    def test_flammable_categories_follow_the_osha_boundaries(self):
+        cases = [((22.9, 35.0), "1"), ((22.9, 35.1), "2"), ((23.0, 100), "3"), ((60.0, 100), "3"), ((60.1, 100), "4"), ((93.0, 200), "4"), ((93.1, 200), None)]
+        for (fp, bp), want in cases: self.assertEqual(G.category(fp, bp)[0], want, (fp, bp))
+
+    def test_heated_near_flashpoint_rule(self):
+        c = self.case(); c["design_limits"]["compounds"] = {"Water": {"flash_point_C": 100.0, "boiling_point_C": 150.0, "anchor": "synthetic"}}
+        near = self.sim(); near["HOT_OUT"]["T"] = 83.4; far = self.sim(); far["HOT_OUT"]["T"] = 83.2
+        t = lambda sim: next(r["detail"] for r in G.evaluate(c, sim, "base") if r["rule"] == "osha-1910.106-a19-flammable-category" and r["object"] == "HOT_OUT")
+        self.assertIn("is within 30 F", t(near)); self.assertIn("more than 30 F below", t(far))        # 100 C - 16.7 C = 83.3 C
+
+    def test_registered_but_unimplemented_rules_never_produce_rows(self):
+        c = self.case(); c["design_limits"]["relief"] = {"X": {"set_pressure_kPa": 280.0, "accumulation_pct": 10.0, "stream": "HOT_OUT", "anchor": "synthetic"}}
+        self.assertEqual([r for r in G.evaluate(c, self.sim(), "base") if r["rule"] == "nfpa-30-flammable-liquids"], [])
+
+    def adv(self, **eq):
+        c = self.case(); c["design_limits"].update(eq); return c
+    def test_vessel_pressure_margin_uses_the_greater_of_10_percent_and_25_psi(self):
+        st = lambda P: (lambda s: (s["HOT_OUT"].update(P=P), s)[1])(self.sim())
+        v = lambda dp, basis="gauge": self.adv(vessels={"V": {"stream": "HOT_OUT", "design_pressure_kPa": dp, "pressure_basis": basis, "anchor": "synthetic"}})
+        rid = "forum-vessel-design-pressure-margin"
+        # operating 294 kPa abs = 192.7 kPa(g): 25 psi (172.4) governs over 10 % (19.3): need 365.1 kPa(g)
+        for dp, basis, want in ((400.0, "gauge", "pass"), (300.0, "gauge", "advisory"), (400.0 + 101.325, "absolute", "pass"), (400.0, "absolute", "advisory"), (365.0, "gauge", "advisory"), (365.2, "gauge", "pass")):
+            self.assertEqual(self.status(G.evaluate(v(dp, basis), self.sim(), "base"), rid), [want], (dp, basis))
+        # high pressure: operating 2101.325 kPa abs = 2000 kPa(g): 10 % (200) governs over 25 psi: need 2200
+        hi = st(2101.325)
+        for dp, want in ((2190.0, "advisory"), (2210.0, "pass")): self.assertEqual(self.status(G.evaluate(v(dp), hi, "base"), rid), [want], dp)
+
+    def test_vessel_temperature_margin_bands(self):
+        c = lambda dT: self.adv(vessels={"V": {"stream": "HOT_OUT", "design_temperature_C": dT, "anchor": "synthetic"}})
+        for dT, want in ((86.1 + 27.9, "pass"), (86.1 + 27.7, "advisory"), (86.1 + 15.0, "advisory"), (86.1 + 14.9, "advisory")):
+            self.assertEqual(self.status(G.evaluate(c(dT), self.sim(), "base"), "forum-vessel-design-temperature-margin"), [want], dT)
+        self.assertIn("inside the quoted", next(r["detail"] for r in G.evaluate(c(86.1 + 20), self.sim(), "base") if r["rule"].endswith("temperature-margin")))
+        self.assertIn("below every quoted", next(r["detail"] for r in G.evaluate(c(86.1 + 10), self.sim(), "base") if r["rule"].endswith("temperature-margin")))
+
+    def test_pump_npsh_ratio_definition_and_margin(self):
+        pump = lambda npshr, energy: self.adv(pumps={"P": {"suction_stream": "COLD_IN", "npsh_required_m": npshr, "vapor_pressure_kPa": 3.17, "density_kg_m3": 997.0, "suction_energy": energy, "anchor": "synthetic"}})
+        ev = lambda npshr, energy: G.evaluate(pump(npshr, energy), self.sim(), "base")       # NPSHA = (101.325 - 3.17) kPa / (997 x 9.80665) = 10.04 m
+        self.assertEqual(self.status(ev(5.0, "low"), "pump-npsha-vs-npshr"), ["pass"]); self.assertEqual(self.status(ev(5.0, "low"), "trade-pump-npsh-margin-ratio"), ["pass"])      # ratio 2.0
+        self.assertEqual(self.status(ev(7.0, "cold_warm_water"), "trade-pump-npsh-margin-ratio"), ["advisory"])         # ratio 1.43 below 1.5
+        self.assertEqual(self.status(ev(7.0, "mitigated"), "trade-pump-npsh-margin-ratio"), ["info"])                     # inside 1.1 to 1.5
+        self.assertEqual(self.status(ev(11.0, "low"), "pump-npsha-vs-npshr"), ["violation"]); self.assertEqual(self.status(ev(11.0, "low"), "trade-pump-npsh-margin-ratio"), [])      # below 1.0: a violation by definition, no margin row
+        c = pump(5.0, "low"); c["design_limits"]["pumps"]["P"]["static_head_m"] = -6.0
+        self.assertEqual(self.status(G.evaluate(c, self.sim(), "base"), "pump-npsha-vs-npshr"), ["violation"])             # a suction lift counts
+
+    def test_valve_drop_fraction_and_flashing(self):
+        def run(pin, pout, sys_dp, vin=0.0, vout=0.0):
+            s = self.sim(); s["HOT_IN"].update(P=pin, vapor_fraction=vin); s["HOT_OUT"].update(P=pout, vapor_fraction=vout)
+            c = self.adv(valves={"V": {"inlet_stream": "HOT_IN", "outlet_stream": "HOT_OUT", "system_dp_kPa": sys_dp, "anchor": "synthetic"}}); return G.evaluate(c, s, "base")
+        rid = "trade-valve-pressure-drop-fraction"
+        for (pin, pout, sdp), want in (((304, 294, 100), "advisory"), ((304, 294, 40), "advisory"), ((500, 300, 600), "pass"), ((500, 300, 800), "info"), ((500, 300, 1000), "info"), ((500, 300, 1001), "advisory")):
+            self.assertEqual(self.status(run(pin, pout, sdp), rid), [want], (pin, pout, sdp))        # (304,294,40) is 25 % but under the 0.7 bar floor; (500,300,1000) is exactly 20 %, which meets the rule
+        self.assertEqual(self.status(run(500, 300, 100, 0.0, 0.1), "trade-valve-flashing"), ["info"]); self.assertEqual(self.status(run(500, 300, 100, 0.0, 0.0), "trade-valve-flashing"), ["pass"])
+        s = self.sim(); c = self.adv(valves={"V": {"inlet_stream": "HOT_IN", "outlet_stream": "HOT_OUT", "system_dp_kPa": 100.0, "anchor": "s"}})
+        self.assertEqual(self.status(G.evaluate(c, s, "base"), "trade-valve-flashing"), ["not-evaluated"])      # the helper sim carries no vapour fraction
+
+    def test_advisory_rules_never_produce_a_violation(self):
+        s = self.sim(); s["HOT_OUT"].update(P=10.0, T=500.0, vapor_fraction=1.0); s["HOT_IN"].update(vapor_fraction=0.0)
+        c = self.adv(vessels={"V": {"stream": "HOT_OUT", "design_pressure_kPa": 1.0, "pressure_basis": "absolute", "design_temperature_C": 1.0, "anchor": "s"}},
+                     valves={"V": {"inlet_stream": "HOT_IN", "outlet_stream": "HOT_OUT", "system_dp_kPa": 1.0, "anchor": "s"}})
+        advisory = {r["id"] for r in G.rules().values() if r.get("tier") == "advisory"}
+        got = {r["status"] for r in G.evaluate(c, s, "base") if r["rule"] in advisory}; self.assertTrue(got) ; self.assertNotIn("violation", got)
+
+    def test_equipment_validation_rules(self):
+        muts = [("vessels.V.stream must be", lambda d: d.update(vessels={"V": {"stream": "NOPE", "design_pressure_kPa": 5, "pressure_basis": "gauge", "anchor": "x"}})),
+                ("pressure_basis must be", lambda d: d.update(vessels={"V": {"stream": "HOT_OUT", "design_pressure_kPa": 5, "anchor": "x"}})),
+                ("needs design_pressure_kPa > 0 or design_temperature_C", lambda d: d.update(vessels={"V": {"stream": "HOT_OUT", "anchor": "x"}})),
+                ("vessels.V: needs an anchor", lambda d: d.update(vessels={"V": {"stream": "HOT_OUT", "design_temperature_C": 5}})),
+                ("npsh_required_m must be", lambda d: d.update(pumps={"P": {"suction_stream": "COLD_IN", "vapor_pressure_kPa": 3, "density_kg_m3": 997, "suction_energy": "low", "anchor": "x"}})),
+                ("suction_energy must be", lambda d: d.update(pumps={"P": {"suction_stream": "COLD_IN", "npsh_required_m": 5, "vapor_pressure_kPa": 3, "density_kg_m3": 997, "suction_energy": "huge", "anchor": "x"}})),
+                ("suction_stream must be a stream", lambda d: d.update(pumps={"P": {"suction_stream": "NOPE", "npsh_required_m": 5, "vapor_pressure_kPa": 3, "density_kg_m3": 997, "suction_energy": "low", "anchor": "x"}})),
+                ("system_dp_kPa must be", lambda d: d.update(valves={"V": {"inlet_stream": "HOT_IN", "outlet_stream": "HOT_OUT", "anchor": "x"}})),
+                ("outlet_stream must be a stream", lambda d: d.update(valves={"V": {"inlet_stream": "HOT_IN", "outlet_stream": "NOPE", "system_dp_kPa": 5, "anchor": "x"}}))]
+        for needle, f in muts:
+            c = schema.load(HX["A"]); d = {}; f(d); c["design_limits"] = d; self.assertTrue(any(needle in x for x in schema.validate(c)), needle)
+
+    def test_relief_uses_only_supplied_numbers(self):
+        c = self.case(); c["design_limits"]["relief"] = {"X": {"set_pressure_kPa": 280.0, "accumulation_pct": 10.0, "stream": "HOT_OUT", "anchor": "synthetic: clause and edition from a licensed copy go here"}}
+        self.assertEqual(self.status(G.evaluate(c, self.sim(), "base"), "api-520-521-relief-overpressure"), ["pass"])         # 294 <= 280 x 1.10 = 308
+        c["design_limits"]["relief"]["X"]["accumulation_pct"] = 4.0; self.assertEqual(self.status(G.evaluate(c, self.sim(), "base"), "api-520-521-relief-overpressure"), ["violation"])   # 294 > 291.2
+
+    def test_design_limits_validation(self):
+        mk = lambda f: (lambda c: (c.update(design_limits={}), f(c["design_limits"])))
+        base = lambda: {"streams": {"HOT_OUT": {"T_C": {"max": 90.0}, "anchor": "x"}}}
+        muts = [("not a stream", lambda d: d["streams"].update(NOPE={"T_C": {"max": 1}, "anchor": "x"})), ("needs an anchor", lambda d: d["streams"]["HOT_OUT"].pop("anchor")),
+                ("min is above max", lambda d: d["streams"]["HOT_OUT"].update(T_C={"min": 5, "max": 1})), ("needs at least one of", lambda d: d["streams"]["HOT_OUT"].pop("T_C")),
+                ("numeric flash_point_C", lambda d: d.update(compounds={"Water": {"anchor": "x"}})), ("not in basis.compounds", lambda d: d.update(compounds={"Gold": {"flash_point_C": 1, "boiling_point_C": 2, "anchor": "x"}})),
+                ("set_pressure_kPa > 0", lambda d: d.update(relief={"X": {"set_pressure_kPa": 0, "accumulation_pct": 10, "stream": "HOT_OUT", "anchor": "x"}})),
+                ("must be the stream whose pressure", lambda d: d.update(relief={"X": {"set_pressure_kPa": 5, "accumulation_pct": 10, "stream": "NOPE", "anchor": "x"}}))]
+        for needle, f in muts:
+            c = schema.load(HX["A"]); d = base(); f(d); c["design_limits"] = d; self.assertTrue(any(needle in x for x in schema.validate(c)), needle)
+        c = schema.load(HX["A"]); c["design_limits"] = base(); self.assertEqual(schema.validate(c), [])
+
+    def test_runner_attaches_guardrails_without_touching_results(self):
+        c = schema.load(CASE); c["design_limits"] = {"streams": {c["streams"][0]["id"]: {"T_C": {"max": -1000.0}, "anchor": "synthetic impossible limit"}}}
+        run = runner.run_case(c, transport_factory=FakeTransport, packages=[c["basis"]["package_in_paper"]], scenarios=["base"]); o = run["results"][0]
+        self.assertTrue(any(g["status"] == "violation" for g in o["guardrails"]))
+        plain = runner.run_case(schema.load(CASE), transport_factory=FakeTransport, packages=[c["basis"]["package_in_paper"]], scenarios=["base"])["results"][0]
+        self.assertEqual(o["values"], plain["values"])                                                    # a guardrail reports; it never alters a comparison
+        rows = runner.ledger_rows(run); self.assertTrue(any(":violation:" in g for g in rows[0]["guardrails"]))
+
+
+HYD = {k: os.path.join(os.path.dirname(CASE), v + ".json") for k, v in (("pump", "water-pump-constructed"), ("comp", "methane-compressor-constructed"), ("valve", "methane-valve-isenthalpic-constructed"))}
+
+
+class PumpCompressorValve(unittest.TestCase):
+    def c(self, k): return schema.load(HYD[k])
+    def test_validate_and_scenarios_apply(self):
+        for k in HYD:
+            c = self.c(k); self.assertEqual(schema.validate(c), [], k); self.assertEqual(c["source"]["read"], "computed"); self.assertFalse(c["review"]["human"])
+            for sc in c["scenarios"]: self.assertEqual(schema.validate(schema.apply_scenario(c, sc["id"])), [], sc["id"])
+
+    def test_outlet_rule_pressure_for_pump_valve_compressor_temperature_for_heater(self):
+        for k in HYD:
+            c = self.c(k); self.assertNotIn("T", c["streams"][1])                                        # the outlet temperature is a result, not a specification
+            del c["streams"][1]["P"]; self.assertTrue(any(".P" in x for x in schema.validate(c)), k)       # but the outlet pressure is required
+        h = schema.load(HEATCOOL); self.assertEqual(schema.validate(h), []); del next(s for s in h["streams"] if s["id"] == "HOT")["T"]
+        self.assertTrue(any("streams[HOT].T" in x for x in schema.validate(h)))                                    # a heater outlet still needs its temperature
+
+    def test_pump_reference_matches_the_hydraulic_power_formula(self):
+        """Duty = flow x pressure rise / (density x efficiency): 36000 kg/h of water (997.05 kg/m3) through 398.675 kPa at 0.75."""
+        c = self.c("pump"); r = {x["name"]: x["value"] for x in c["reported"]}
+        self.assertAlmostEqual(r["pump_duty"], 36000 / 997.05 * 398.675 / 0.75, delta=0.002 * r["pump_duty"])
+        s = schema.apply_scenario(c, "flow-double"); self.assertAlmostEqual({x["name"]: x["value"] for x in s["reported"]}["pump_duty"], 2 * r["pump_duty"], delta=0.001 * r["pump_duty"])
+
+    def test_compressor_and_valve_references_have_the_right_signs(self):
+        c = self.c("comp"); b = {x["name"]: x["value"] for x in c["reported"]}; d = {x["name"]: x["value"] for x in schema.apply_scenario(c, "discharge-10-bar")["reported"]}
+        self.assertGreater(b["outlet_T"], 25.0); self.assertGreater(d["compressor_duty"], b["compressor_duty"]); self.assertGreater(d["outlet_T"], b["outlet_T"])
+        v = self.c("valve"); vb = {x["name"]: x["value"] for x in v["reported"]}; vs = {x["name"]: x["value"] for x in schema.apply_scenario(v, "to-30-bar")["reported"]}
+        self.assertLess(vb["outlet_T"], 25.0); self.assertLess(vb["outlet_T"], vs["outlet_T"]); self.assertLess(vs["outlet_T"], 25.0)       # throttling a real gas cools it, less for a smaller drop
+
+
+ASPEN = {"flash": os.path.join(os.path.dirname(CASE), "methanol-water-adiabatic-flash-aspen-getting-started.json"), "mch": os.path.join(os.path.dirname(CASE), "mch-extractive-distillation-aspen-getting-started.json")}
+
+
+class AspenGettingStarted(unittest.TestCase):
+    """Cases transcribed from the printed results of Aspen Plus 2006.5 'Getting Started' (a document supplied by the user, no public address)."""
+    def test_both_validate_and_carry_a_local_copy_identity(self):
+        for k, f in ASPEN.items():
+            c = schema.load(f); self.assertEqual(schema.validate(c), [], k); lc = c["source"]["local_copy"]; self.assertEqual(len(lc["sha256"]), 64); self.assertTrue(lc["supplied_by"])
+            self.assertFalse(c["review"]["human"]); self.assertIn("all rights reserved", c["source"]["licence"])
+
+    def test_local_copy_rule(self):
+        for key in ("sha256", "supplied_by", "filename"):
+            c = schema.load(ASPEN["flash"]); c["source"]["local_copy"].pop(key); self.assertTrue(any("local_copy" in x for x in schema.validate(c)), key)
+        c = schema.load(ASPEN["flash"]); c["source"]["local_copy"]["sha256"] = "abc"; self.assertTrue(any("local_copy" in x for x in schema.validate(c)))
+
+    def test_flash_printed_numbers_are_self_consistent(self):
+        """Printed vapour: 8.262 methanol and 2.494 water lbmol/h = 309.677 lb/h; flash 165.28321 F; vapour fraction 0.10756625 x 100 lbmol/h = 10.757 lbmol/h printed."""
+        c = schema.load(ASPEN["flash"]); mm = c["basis"]["molar_mass_g_mol"]; r = {x["name"]: x for x in c["reported"]}
+        self.assertAlmostEqual((8.262 * mm["Methanol"] + 2.494 * mm["Water"]) / 309.677, 1.0, delta=1e-4)
+        self.assertAlmostEqual(r["vapor_mass_flow"]["value"], 309.677 * 0.45359237, places=3); self.assertAlmostEqual(r["flash_T"]["value"], (165.28321 - 32) / 1.8, places=3)
+        self.assertAlmostEqual(100 * r["flash_vapor_fraction"]["value"], 8.262 + 2.494, delta=0.01)
+        self.assertAlmostEqual(r["vapor_methanol_mass_fraction"]["value"], 8.262 * mm["Methanol"] / (8.262 * mm["Methanol"] + 2.494 * mm["Water"]), places=4)
+
+    def test_unknown_paper_package_gives_none_not_false(self):
+        c = schema.load(ASPEN["flash"]); self.assertEqual(c["basis"]["package_in_paper"], "not stated")
+        u = schema.load(CASE); u["basis"]["package_in_paper"] = "not stated"
+        self.assertIsNone(runner.run_case(u, transport_factory=FakeTransport, packages=[u["basis"]["packages"][0]], scenarios=["base"])["paper_package_within_tol"])
+        k = schema.load(CASE); self.assertIsInstance(runner.run_case(k, transport_factory=FakeTransport, packages=[k["basis"]["package_in_paper"]], scenarios=["base"])["paper_package_within_tol"], bool)
+
+    def test_mch_is_blocked_and_refuses_to_run(self):
+        c = schema.load(ASPEN["mch"]); self.assertEqual(c["status"], "blocked"); self.assertFalse(schema.capability(c)["buildable"])
+        self.assertFalse(runner.run_case(c)["ran"])
+
+    def test_mch_printed_numbers(self):
+        c = schema.load(ASPEN["mch"]); mm = c["basis"]["molar_mass_g_mol"]
+        self.assertAlmostEqual((5.219 * mm["Toluene"] + 0.262 * mm["Phenol"] + 194.519 * mm["Methylcyclohexane"]) / 19605.002, 1.0, delta=2e-5)     # the molar masses reproduce the printed mass flow
+        pur = {1200: 0.97257198}; pur.update({int(s["id"].split("-")[1]): next(o["set"] for o in s["overrides"] if o.get("reported")) for s in c["scenarios"]})
+        flows = sorted(pur); self.assertEqual(flows, list(range(1200, 2001, 100)))
+        self.assertTrue(all(pur[b] > pur[a] for a, b in zip(flows, flows[1:])))                                                                    # more solvent, purer distillate
+        interp = 1500 + 100 * (0.98 - pur[1500]) / (pur[1600] - pur[1500])
+        self.assertAlmostEqual(interp, 1516.9, delta=0.1); self.assertIn("1515.07763", c["source"]["note"]); self.assertIn("1517.1", c["source"]["note"])     # the guide's own two answers
+
+    def test_mole_fraction_reference_runs_end_to_end(self):
+        c = schema.load(FLASH); mm = {"Water": 18.015, "Ethanol": 46.069}; c["basis"]["molar_mass_g_mol"] = mm; x = (0.66 / mm["Ethanol"]) / (0.66 / mm["Ethanol"] + 0.34 / mm["Water"])    # the flash fake gives 0.66 mass fraction ethanol in the vapour
+        c["reported"] = [{"name": "vapor_ethanol_mole_fraction", "kind": "stream_mole_fraction", "target": "VAPOR", "compound": "Ethanol", "value": round(x, 6), "unit": "-", "anchor": "test", "pass_rel": 1e-5}]; c["scenarios"] = []
+        self.assertEqual(schema.validate(c), []); run = runner.run_case(c, transport_factory=FlashTransport, packages=[c["basis"]["package_in_paper"]], scenarios=["base"])
+        v = run["results"][0]["values"]["vapor_ethanol_mole_fraction"]; self.assertTrue(v["within_tol"], v); self.assertAlmostEqual(v["simulated"], x, places=6)
+
+    def test_mole_fraction_kind_converts_and_validates(self):
+        class Be:
+            def read_stream(self, sid): return {"mass_fractions": {"Methanol": 0.5, "Water": 0.5}}
+        r = {"kind": "stream_mole_fraction", "target": "X", "compound": "Methanol"}
+        v = runner._simulated(r, None, Be(), {}, {"Methanol": 32.042, "Water": 18.015}); self.assertAlmostEqual(v, (0.5 / 32.042) / (0.5 / 32.042 + 0.5 / 18.015), places=9)
+        with self.assertRaises(RuntimeError): runner._simulated(r, None, Be(), {}, None)
+        with self.assertRaises(RuntimeError): runner._simulated(r, None, Be(), {}, {"Methanol": 32.042})
+        c = schema.load(ASPEN["mch"]); c["basis"]["molar_mass_g_mol"].pop("Phenol"); self.assertTrue(any("mole-fraction reference needs" in x for x in schema.validate(c)))
+
+
+HDPE = os.path.join(os.path.dirname(CASE), "hdpe-slurry-open-loop-liu-sharma.json")
+
+
+class HdpeSlurry(unittest.TestCase):
+    """Printed open-loop results of the slurry HDPE workshop (Liu and Sharma 2025, doi 10.31224/4406, CC BY 4.0): internal consistency of the transcribed numbers."""
+    MWSEG = 28.0538                     # ethylene repeat segment, g/mol
+
+    def test_validates_blocked_and_cc_by_identity(self):
+        c = schema.load(HDPE); self.assertEqual(schema.validate(c), []); self.assertEqual(c["status"], "blocked"); self.assertEqual(c["source"]["doi"], "10.31224/4406"); self.assertIn("Creative Commons Attribution 4.0", c["source"]["licence"])
+        self.assertFalse(schema.capability(c)["buildable"]); self.assertFalse(runner.run_case(c)["ran"])
+
+    def test_printed_streams_close(self):
+        c = schema.load(HDPE); s = {x["id"]: x for x in c["streams"]}
+        feed = sum(s[i]["mass_flow"]["value"] for i in ("C2", "CAT", "H2", "HX")); self.assertAlmostEqual(feed, 20963.31, places=2)
+        poly = {"C2H4": 11.9272, "HDPE": 5684.82, "TiCl4": 1.22, "TEAL": 0.927715, "H2": 1.99774, "HX": 15174.3}
+        self.assertAlmostEqual(sum(poly.values()) / 20875.2, 1.0, delta=1e-6)                                    # the printed components add to the printed stream flow
+        cat = s["CAT"]["composition"]["values"]; self.assertAlmostEqual(cat["TiCl4"] + cat["TEAL"] + cat["HX"], 1.0, places=6); self.assertAlmostEqual(cat["TiCl4"] * 255.31, 1.22, places=3)
+        deficits = {"C2H4": 5700 - poly["C2H4"] - poly["HDPE"], "H2": 8 - poly["H2"], "HX": 15000 + 252.93 - poly["HX"], "TEAL": 1.16 - poly["TEAL"]}
+        self.assertAlmostEqual(sum(deficits.values()), feed - 20875.2, delta=2e-4 * (feed - 20875.2))       # the unprinted vapour stream (88.11 kg/h) equals what is missing from the polymer stream, to 0.02 percent
+
+    def test_reported_values_match_the_printed_stream(self):
+        c = schema.load(HDPE); r = {x["name"]: x for x in c["reported"]}
+        self.assertEqual((r["polymer_T"]["value"], r["polymer_P"]["value"], r["polymer_mass"]["value"]), (85.0, 755.0, 20875.2))
+        for comp, kg in (("C2H4", 11.9272), ("HDPE", 5684.82), ("H2", 1.99774), ("HX", 15174.3), ("TEAL", 0.927715)): self.assertAlmostEqual(r[f"polymer_{comp}_mass_fraction"]["value"], kg / 20875.2, places=7, msg=comp)
+
+    def test_printed_moment_relations(self):
+        dpn, dpw, fmom, hdpe = 99598.2, 254569.0, 202.632, 5684.82
+        self.assertAlmostEqual(hdpe / fmom / self.MWSEG, 1.0, delta=1e-4)                                       # FMOM is total segments: mass / segment molar mass
+        self.assertAlmostEqual(dpn * self.MWSEG / 2.794e6, 1.0, delta=2e-4)                                      # the text's MWN
+        zmom = fmom / dpn; self.assertAlmostEqual(hdpe / zmom / 2.794e6, 1.0, delta=2e-4)
+
+    def test_the_texts_first_run_mww_disagrees_with_the_printed_dpw(self):
+        dpn, dpw = 99598.2, 254569.0; pdi = dpw / dpn
+        self.assertAlmostEqual(6.94027e6 / 2.71533e6, pdi, delta=1e-3 * pdi)                                        # the second run's printed MWN and MWW give the table's PDI
+        implied = dpw * self.MWSEG; self.assertAlmostEqual(implied / 7.194163e6 - 1, -0.0073, delta=0.0005)       # printed text value is 0.73 percent above DPW x MWSEG
+        self.assertAlmostEqual(implied / 7.141163e6 - 1, 0.0, delta=1e-4)                                         # a transposed digit (7.141 for 7.194) would agree
+        self.assertAlmostEqual(7.194163 / 2.794, 2.5749, places=3); self.assertAlmostEqual(pdi, 2.5560, places=3)
+
+    def test_the_texts_second_run_conversion_is_a_slip(self):
+        self.assertAlmostEqual(5684.82 / 5700 * 100, 99.73, places=2)                                              # first run as printed
+        self.assertAlmostEqual(5525.38 / 5700 * 100, 96.94, places=2); self.assertNotAlmostEqual(5525.38 / 5700 * 100, 97.94, places=1)     # printed as 97.94
+
+
+class Ledger(unittest.TestCase):
+    def test_append_and_read_are_additive(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "sub", "ledger.jsonl"); self.assertEqual(ledger.read(p), [])
+            self.assertEqual(ledger.append([{"case": "a"}, {"case": "b"}], p), 2); self.assertEqual(ledger.append([{"case": "c"}], p), 1)
+            rows = ledger.read(p); self.assertEqual([r["case"] for r in rows], ["a", "b", "c"]); self.assertTrue(all("ts" in r for r in rows))
+
+    def test_rows_carry_scenario_and_hash(self):
+        c = case(); rows = runner.ledger_rows(runner.run_case(c, FakeTransport))
+        self.assertEqual(len(rows), 9); self.assertEqual({r["scenario"] for r in rows}, {"base", "propylene-0.00571", "mass-from-mole-flow"})
+        self.assertEqual({r["case_hash"] for r in rows}, {schema.case_hash(c)})
+
+
+class Tools(unittest.TestCase):
+    def test_registered_list_validate_and_run_gated(self):
+        names = {t["name"] for t in M.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]}
+        self.assertTrue({"casebook_list", "casebook_validate", "casebook_run"} <= names)
+        err, r = call("casebook_list"); self.assertFalse(err); self.assertIn("cumene-alkylator-feed-heater", [x["id"] for x in r["cases"]])
+        err, r = call("casebook_validate", case_id="cumene-alkylator-feed-heater"); self.assertFalse(err); self.assertTrue(r["valid"])
+        for bad in ("../etc/passwd", "Cumene", "a b"):
+            err, msg = call("casebook_validate", case_id=bad); self.assertTrue(err, bad); self.assertIn("case_id must be", msg)      # refused by the id rule, not merely "file not found"
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"CASEBOOK_DIR": os.path.join(d, "cases")}):
+            os.makedirs(os.path.join(d, "cases")); shutil.copy(CASE, os.path.join(d, "secret.json"))          # a real case file one level above the case directory
+            err, msg = call("casebook_validate", case_id="../secret"); self.assertTrue(err); self.assertIn("case_id must be", msg)
+        with mock.patch.dict(os.environ):
+            os.environ.pop("DWSIM_MCP_CMD", None)
+            err, msg = call("casebook_run", case_id="cumene-alkylator-feed-heater"); self.assertTrue(err); self.assertIn("DWSIM_MCP_CMD", msg)
+
+    def test_run_writes_the_ledger_only_with_confirm(self):
+        with tempfile.TemporaryDirectory() as d:
+            orig, old = ledger.DEFAULT, runner.default_transport
+            ledger.DEFAULT = os.path.join(d, "l.jsonl"); runner.default_transport = FakeTransport
+            try:
+                err, r = call("casebook_run", case_id="cumene-alkylator-feed-heater", packages=["SRK"], scenarios=["base"]); self.assertFalse(err, r)
+                self.assertIn("not written", r["ledger"]); self.assertEqual(ledger.read(), [])
+                err, r = call("casebook_run", case_id="cumene-alkylator-feed-heater", packages=["SRK"], scenarios=["base"], confirm=True); self.assertFalse(err, r)
+                self.assertEqual(r["ledger_rows_written"], 1); self.assertEqual(len(ledger.read()), 1)
+            finally:
+                ledger.DEFAULT, runner.default_transport = orig, old
+
+
+if __name__ == "__main__": unittest.main()

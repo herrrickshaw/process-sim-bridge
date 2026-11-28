@@ -44,6 +44,10 @@ class Flowsheet:
     streams: dict[str, Stream] = field(default_factory=dict)
     units: dict[str, Unit] = field(default_factory=dict)
 
+    def fingerprint(self) -> str:
+        """The whole sheet as one comparable string. A built simulator case is only valid for the contents it was built from."""
+        return json.dumps(asdict(self), sort_keys=True, default=repr)
+
     def to_json(self, path: str) -> None:
         with open(path, "w") as f:
             json.dump(asdict(self), f, indent=2)
