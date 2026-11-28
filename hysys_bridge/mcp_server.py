@@ -5,6 +5,7 @@ Run:   python3 -m hysys_bridge.mcp_server          (add to .mcp.json / claude_de
 Design (patterned on brack101/AspenPlus-MCP-Server, MIT: stdio MCP server + COM wrapper, Windows-only, degrades
 gracefully elsewhere) but with writes gated:
   * Everything works on in-memory *sessions* (named flowsheets). Nothing touches HYSYS until write_to_hysys.
+  * Every true/false argument must be a JSON boolean; text such as "false", numbers and null are refused.
   * write_to_hysys needs confirm=true AND blocks on validation errors. It uses the MOCK backend unless live=true,
     HYSYS_LIVE=1 is set in the server's environment, and the platform is Windows with HYSYS installed.
   * A live write goes only into a case the caller names (case_path, or use_active=true). It never saves or
@@ -263,6 +264,15 @@ TOOLS.update(_POLYMER_TOOLS)
 from .hmb_report_link import TOOLS as _HMB_REPORT_TOOLS  # safety_hmb_report: HMB closure / model / P&ID audit via the safety toolkit
 TOOLS.update(_HMB_REPORT_TOOLS)
 
+from .casebook.tools import TOOLS as _CASEBOOK_TOOLS  # casebook_* tools: published reference cases run on DWSIM and compared
+TOOLS.update(_CASEBOOK_TOOLS)
+from .datasheet_check import TOOLS as _DATASHEET_TOOLS  # datasheet_check: attribute mismatches across P&ID, H&MB and vendor data sheets
+TOOLS.update(_DATASHEET_TOOLS)
+from .lng_link import TOOLS as _LNG_TOOLS  # lng_cost_*: LNG value-chain cost estimate (lng-cost repo), capacity from a solved stream
+TOOLS.update(_LNG_TOOLS)
+from .ppac_link import TOOLS as _PPAC_TOOLS  # ppac_*: PPAC Ready Reckoner tables as reference data (ppac-ready-reckoner-data repo)
+TOOLS.update(_PPAC_TOOLS)
+
 
 # ---- JSON-RPC / MCP stdio loop ----------------------------------------------------------------------------
 def handle(msg: dict):
@@ -282,8 +292,11 @@ def handle(msg: dict):
         fn, _, schema = TOOLS[name]; args = params.get("arguments") or {}
         missing = [k for k in schema["required"] if k not in args]
         extra = [k for k in args if k not in schema["properties"]]
+        # Handlers test flags by truthiness, where the text "false" would count as yes: accept real booleans only.
+        not_bool = [k for k, v in args.items() if schema["properties"].get(k, {}).get("type") == "boolean" and not isinstance(v, bool)]
         try:
             if missing or extra: raise ValueError(f"missing {missing} / unexpected {extra}")
+            if not_bool: raise ValueError(f"{not_bool} must be true or false (a JSON boolean, not text, a number or null)")
             if name == "load_hmb" and not ({"path", "csv_text"} & set(args)): raise ValueError("pass path or csv_text")
             res = fn(args); is_err = False
         except SystemExit as e:
@@ -309,12 +322,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
-from .casebook.tools import TOOLS as _CASEBOOK_TOOLS  # casebook_* tools: published reference cases run on DWSIM and compared
-TOOLS.update(_CASEBOOK_TOOLS)
-from .datasheet_check import TOOLS as _DATASHEET_TOOLS  # datasheet_check: attribute mismatches across P&ID, H&MB and vendor data sheets
-TOOLS.update(_DATASHEET_TOOLS)
-from .lng_link import TOOLS as _LNG_TOOLS  # lng_cost_*: LNG value-chain cost estimate (lng-cost repo), capacity from a solved stream
-TOOLS.update(_LNG_TOOLS)
-from .ppac_link import TOOLS as _PPAC_TOOLS  # ppac_*: PPAC Ready Reckoner tables as reference data (ppac-ready-reckoner-data repo)
-TOOLS.update(_PPAC_TOOLS)
+    # Tool modules reach sessions through `from . import mcp_server`. Run that module: under -m, this file is a second copy
+    # called "__main__" with its own empty SESSIONS.
+    from hysys_bridge.mcp_server import main as _main
+    _main()

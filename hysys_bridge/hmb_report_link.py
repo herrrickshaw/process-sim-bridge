@@ -12,7 +12,7 @@ flowsheet JSON. The balance logic lives only in the toolkit; this file converts 
   * with a P&ID, each stream is matched to the P&ID connection with the same id (or the one named in line_map)
 """
 from __future__ import annotations
-import argparse, json, os, sys
+import argparse, json, os, shutil, sys, tempfile
 
 from . import dexpi_export, extract_hmb
 from .ir import Flowsheet
@@ -74,12 +74,20 @@ def build(design: Flowsheet, model: Flowsheet | None, pid: Flowsheet | None, ext
     spec = to_spec(design, model, pid, extra)
     result = A.audit(spec)
     result["notes"] += spec["_bridge_notes"]
-    os.makedirs(out_dir, exist_ok=True)
-    prefix = os.path.join(os.path.abspath(out_dir), "hmb")
-    clash = [p for p in (prefix + "_report.xlsx", prefix + "_report.html", prefix + "_findings.csv") if os.path.exists(p)]
-    if clash and not overwrite: raise FileExistsError(f"{clash[0]} exists; pass overwrite=true to replace it")
     return {"verdict": result["verdict"], "counts": result["counts"], "findings": result["findings"][:100],
-            "files": R.write(result, prefix), "notes": result["notes"], "limits": result["limits"]}
+            "files": _write_reports(R, result, os.path.abspath(out_dir), overwrite), "notes": result["notes"], "limits": result["limits"]}
+
+
+def _write_reports(R, result: dict, out_dir: str, overwrite: bool) -> list[str]:
+    """The toolkit decides which files it writes, so write them aside first and check every one before touching out_dir."""
+    with tempfile.TemporaryDirectory() as tmp:
+        made = R.write(result, os.path.join(tmp, "hmb"))
+        targets = [os.path.join(out_dir, os.path.basename(p)) for p in made]
+        clash = [p for p in targets if os.path.lexists(p)]
+        if clash and not overwrite: raise FileExistsError(f"{clash[0]} exists; pass overwrite=true to replace it")
+        os.makedirs(out_dir, exist_ok=True)
+        for source, target in zip(made, targets): shutil.move(source, target)
+    return targets
 
 
 def _load(path: str) -> Flowsheet:
@@ -101,7 +109,7 @@ def t_hmb_report(a):
 _S = {"type": "string"}
 TOOLS = {"safety_hmb_report": (t_hmb_report,
     "Audit an HMB session: mass/component/energy closure, differences from a model-results session, links to a P&ID session; writes "
-    "Excel, HTML and CSV. Missing data is 'not checked', never a pass. Needs PROCESS_SAFETY_PATH.",
+    "Excel, HTML, CSV and text reports. Missing data is 'not checked', never a pass. Needs PROCESS_SAFETY_PATH.",
     {"type": "object", "properties": {"name": _S, "model": _S, "pid": _S, "extra_path": _S, "out_dir": _S, "overwrite": {"type": "boolean"}},
      "required": ["name", "out_dir"], "additionalProperties": False})}
 
