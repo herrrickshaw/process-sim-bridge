@@ -309,16 +309,29 @@ def handle(msg: dict):
     return err(-32601, f"method not found: {method}")
 
 
+def close_cases():
+    """Close every open simulator case, so none outlives the server. One that fails to close does not stop the others."""
+    from .aspen import tools as aspen
+    from .dwsim import tools as dwsim
+    for module in (dwsim, aspen):
+        for name in list(module.CASES):
+            try: module._close(name)
+            except Exception as e: print(f"could not close the case for session {name!r}: {type(e).__name__}: {e}", file=sys.stderr)
+
+
 def main():
-    for line in sys.stdin:
-        line = line.strip()
-        if not line: continue
-        try:
-            reply = handle(json.loads(line))
-        except json.JSONDecodeError:
-            reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}
-        if reply is not None:
-            sys.stdout.write(json.dumps(reply) + "\n"); sys.stdout.flush()
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line: continue
+            try:
+                reply = handle(json.loads(line))
+            except json.JSONDecodeError:
+                reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}
+            if reply is not None:
+                sys.stdout.write(json.dumps(reply) + "\n"); sys.stdout.flush()
+    finally:
+        close_cases()
 
 
 if __name__ == "__main__":
