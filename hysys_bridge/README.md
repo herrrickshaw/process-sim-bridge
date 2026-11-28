@@ -55,6 +55,8 @@ Typical chain: `extract_pid` (or `load_dexpi`) -> `reconcile` -> `load_hmb` -> `
 
 A DWSIM or Aspen case belongs to the session contents it was built from. If the session is changed or removed, solving the case and every tool that uses its results refuse until you build and solve again; closing it still works.
 
+`casebook_run` and `casebook_hazop` have no mock: they start live DWSIM only when called with `live=true` (and `DWSIM_MCP_CMD` set); `confirm=true` only controls the ledger. The `python -m hysys_bridge.casebook` command line is run by a person and needs no flag.
+
 Every true/false argument must be a JSON boolean: text such as `"false"`, numbers and null are refused.
 
 Safety: writes need `confirm=true` and clean validation; they go to the MOCK backend unless `live=true`, the server is

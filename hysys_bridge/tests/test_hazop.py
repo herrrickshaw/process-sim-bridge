@@ -164,7 +164,7 @@ class Tool(unittest.TestCase):
             jdump(c, os.path.join(d, c["id"] + ".json"))
             jdump({"id": "s1", "case": c["id"], "nodes": [{"id": "n", "stream": feed["id"], "deviations": [dev(id="more")]}]}, os.path.join(d, "s1.json"))
             with mock.patch.dict(os.environ, {"CASEBOOK_DIR": d, "HAZOP_DIR": d}), mock.patch.object(runner, "default_transport", FakeTransport):
-                before = sorted(os.listdir(d)); out = tools.t_hazop({"spec_id": "s1"}); self.assertEqual(sorted(os.listdir(d)), before)
+                before = sorted(os.listdir(d)); out = tools.t_hazop({"spec_id": "s1", "live": True}); self.assertEqual(sorted(os.listdir(d)), before)
             self.assertTrue(out["ran"]); self.assertIn("HAZOP deviation worksheet", out["markdown"]); self.assertIn("casebook_hazop", tools.TOOLS)
             with mock.patch.dict(os.environ, {"CASEBOOK_DIR": d, "HAZOP_DIR": d}):
                 jdump({"id": "s2", "case": c["id"], "nodes": [{"id": "n", "stream": "NOPE", "deviations": [dev()]}]}, os.path.join(d, "s2.json"))
