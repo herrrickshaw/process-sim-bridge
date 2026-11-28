@@ -55,22 +55,32 @@ class MockTree:
         return self.ran
 
 
-class AspenComTree:                                     # pragma: no cover  (Windows + licensed Aspen Plus only; untested)
+ASPEN_CLOSE_WAIT_S = 60.0
+
+
+class AspenComTree:                                     # never run on real Aspen (Windows + licence); open/close are tested with fakes
     def __init__(self, path: str | None = None, visible: bool = False):
         if sys.platform != "win32": raise RuntimeError("AspenComTree needs Windows + a licensed Aspen Plus install")
         from concurrent.futures import ThreadPoolExecutor
         import pythoncom
         self._ex = ThreadPoolExecutor(max_workers=1, initializer=pythoncom.CoInitialize)      # all COM calls on one STA thread
+        self.app = None
+
         def start():
             import win32com.client
-            app = win32com.client.Dispatch("Apwn.Document"); app.SuppressDialogs = True; app.Visible = visible
+            self.app = app = win32com.client.Dispatch("Apwn.Document"); app.SuppressDialogs = True; app.Visible = visible
             if path:
                 if path.lower().endswith(".bkp"): app.InitFromArchive2(path)
                 else: app.InitFromFile2(path)
-            return app
-        self.app = self._call(start)
+        try: self._call(start)
+        except BaseException:
+            try: self.close()                                  # do not leave a half-opened Aspen behind
+            except Exception: pass                             # the opening error is the one to report
+            raise
 
-    def _call(self, fn): return self._ex.submit(fn).result()
+    def _call(self, fn):
+        if self._ex is None: raise RuntimeError("this Aspen case is closed; run aspen_build again")
+        return self._ex.submit(fn).result()
     def _node(self, path):
         n = self.app.RootModel("").FindNode(path)
         if n is None: raise KeyError(f"Aspen node not found: {path}")
@@ -109,7 +119,24 @@ class AspenComTree:                                     # pragma: no cover  (Win
             if time.time() - t0 > timeout_s: self._call(lambda: self.app.Engine.Stop()); return False
             time.sleep(0.5)
         return True
-    def close(self): self._ex.shutdown(wait=False)
+    def close(self):
+        """Close the document and drop the COM reference on the thread that owns them (as both MIT servers above do; neither
+        calls Quit). Nothing is saved. Whether AspenPlus.exe then exits has not been seen on a real installation."""
+        if self._ex is None: return
+        ex, self._ex = self._ex, None
+
+        def release():
+            import pythoncom
+            app, self.app = self.app, None
+            try:
+                if app is not None: app.Close()
+            finally:
+                app = None
+                pythoncom.CoUninitialize()
+        try: ex.submit(release).result(timeout=ASPEN_CLOSE_WAIT_S)
+        except Exception as e:
+            raise RuntimeError(f"Aspen did not close cleanly ({type(e).__name__}: {e}); it may still be running: check Task Manager") from e
+        finally: ex.shutdown(wait=False)
 
 
 class AspenBackend:

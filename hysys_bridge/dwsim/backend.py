@@ -12,7 +12,7 @@ VERIFIED 2026-11-20 against the real server (ghcr.io/danwbr/dwsim-mcp:latest, se
 Units: the server is SI (K, Pa, kg/s). Values are converted here (C->K, kPa->Pa, kg/h->kg/s).
 """
 from __future__ import annotations
-import json, re, subprocess
+import json, math, os, queue, re, signal, subprocess, threading
 from typing import Protocol
 
 TOOLS = {
@@ -36,19 +36,57 @@ class Transport(Protocol):
     def call(self, tool: str, args: dict) -> dict: ...
 
 
+DEFAULT_TIMEOUT_S = 300.0     # per request. A judgment value, not from DWSIM; the operator can set DWSIM_MCP_TIMEOUT_S
+CLOSE_WAIT_S = 10.0           # at each step of stopping the server
+
+
+def _timeout_s() -> float:
+    raw = os.environ.get("DWSIM_MCP_TIMEOUT_S")
+    if raw is None: return DEFAULT_TIMEOUT_S
+    try: value = float(raw)
+    except ValueError: value = math.nan
+    if not (math.isfinite(value) and value > 0): raise ValueError(f"DWSIM_MCP_TIMEOUT_S must be a positive number of seconds, not {raw!r}")
+    return value
+
+
 class StdioTransport:
     """Newline-delimited JSON-RPC to the DWSIM MCP server, e.g.
-    StdioTransport(["podman","run","-i","--rm","--network","none","ghcr.io/danwbr/dwsim-mcp:latest","--stdio"])."""
+    StdioTransport(["podman","run","-i","--rm","--network","none","ghcr.io/danwbr/dwsim-mcp:latest","--stdio"]).
+    Every request has a time limit. A server that misses it is stopped, and this transport then refuses further calls."""
     def __init__(self, cmd: list[str]):
-        self.p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-        self._id = 0
-        self._rpc("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "hysys-bridge", "version": "0.1"}})
-        self.p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n"); self.p.stdin.flush()
+        self.timeout, self.broken, self._id = _timeout_s(), None, 0
+        # its own process group on POSIX, so a wrapper script's children can be stopped with it
+        self.p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                                  start_new_session=os.name == "posix")
+        try:
+            self._rpc("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "hysys-bridge", "version": "0.1"}})
+            self._exchange({"jsonrpc": "2.0", "method": "notifications/initialized"}, "notifications/initialized", reply=False)
+        except BaseException:
+            self._stop("the DWSIM MCP server did not start")
+            raise
+
+    def _exchange(self, message: dict, method: str, reply: bool = True) -> str:
+        """Send one message and, if `reply`, read one line. Done on a helper thread because either pipe operation can block for ever."""
+        if self.broken: raise RuntimeError(self.broken)
+        done: queue.Queue = queue.Queue(1)
+
+        def work():
+            try:
+                self.p.stdin.write(json.dumps(message) + "\n"); self.p.stdin.flush()
+                done.put((self.p.stdout.readline() if reply else "", None))
+            except BaseException as e: done.put((None, e))
+        worker = threading.Thread(target=work, daemon=True); worker.start()
+        try: line, error = done.get(timeout=self.timeout)
+        except queue.Empty:
+            why = f"the DWSIM MCP server did not answer {method} within {self.timeout:g} s and was stopped"
+            self._stop(why + "; run dwsim_build again (DWSIM_MCP_TIMEOUT_S sets the limit)", worker)
+            raise TimeoutError(why + "; run dwsim_build again (DWSIM_MCP_TIMEOUT_S sets the limit)") from None
+        if error: raise error
+        return line
 
     def _rpc(self, method, params):
         self._id += 1
-        self.p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params}) + "\n"); self.p.stdin.flush()
-        line = self.p.stdout.readline()
+        line = self._exchange({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params}, method)
         if not line: raise RuntimeError("DWSIM MCP server closed the pipe")
         msg = json.loads(line)
         if "error" in msg: raise RuntimeError(msg["error"]["message"])
@@ -61,12 +99,39 @@ class StdioTransport:
         try: return json.loads(text)
         except json.JSONDecodeError: return {"text": text}
 
+    def _signal(self, name: str):
+        """SIGTERM or SIGKILL to the server's process group (POSIX), or to the process itself."""
+        try:
+            if os.name == "posix": os.killpg(self.p.pid, getattr(signal, name))
+            elif name == "SIGKILL": self.p.kill()
+            else: self.p.terminate()
+        except (ProcessLookupError, PermissionError): pass         # already gone
+
+    def _wait(self) -> bool:
+        try: self.p.wait(timeout=CLOSE_WAIT_S); return True
+        except subprocess.TimeoutExpired: return False
+
+    def _stop(self, why: str, worker: threading.Thread | None = None):
+        """Ask the process to end, then force it, then release the pipes. Never waits without a limit."""
+        self.broken = why
+        self._signal("SIGTERM")
+        self._wait()
+        self._signal("SIGKILL")                                    # also catches children that outlived the wrapper
+        self._wait()
+        if worker: worker.join(CLOSE_WAIT_S)
+        if worker and worker.is_alive(): return                    # closing a pipe another thread is blocked on would block here too
+        for pipe in (self.p.stdin, self.p.stdout):
+            try: pipe.close()
+            except OSError: pass
+
     def close(self):
+        if self.broken: return
+        self.broken = "this DWSIM case has been closed; run dwsim_build again"
         try: self.p.stdin.close()                    # EOF ends the --stdio server and, with --rm, removes the container
-        finally:
-            try: self.p.wait(timeout=10)
-            except subprocess.TimeoutExpired: self.p.terminate(); self.p.wait()
-            self.p.stdout.close()
+        except OSError: pass
+        if not self._wait(): self._stop(self.broken); return
+        self._signal("SIGKILL")                                    # anything left in the group
+        self.p.stdout.close()
 
 
 class DwsimBackend:

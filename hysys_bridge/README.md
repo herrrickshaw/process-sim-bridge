@@ -57,6 +57,8 @@ A DWSIM or Aspen case belongs to the session contents it was built from. If the 
 
 `casebook_run` and `casebook_hazop` have no mock: they start live DWSIM only when called with `live=true` (and `DWSIM_MCP_CMD` set); `confirm=true` only controls the ledger. The `python -m hysys_bridge.casebook` command line is run by a person and needs no flag.
 
+Each request to DWSIM has a time limit (300 s unless the operator sets `DWSIM_MCP_TIMEOUT_S`). A server that misses it is stopped and the case must be built again. Open DWSIM and Aspen cases are closed when the tool server's input ends; a server that is killed outright cannot do this. With a container runtime, stopping the client process may not stop the container: check `podman ps` after a timeout.
+
 Every true/false argument must be a JSON boolean: text such as `"false"`, numbers and null are refused.
 
 Safety: writes need `confirm=true` and clean validation; they go to the MOCK backend unless `live=true`, the server is
