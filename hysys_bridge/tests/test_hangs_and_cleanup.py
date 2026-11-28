@@ -232,6 +232,69 @@ class AspenCleanup(unittest.TestCase):
         with self.assertRaisesRegex(OSError, "bad file"): AB.AspenComTree("model.apw")
         self.assertEqual(fake.steps(), ["CoInitialize", "open", "Close", "CoUninitialize"])
 
+    def test_the_opening_error_is_reported_even_if_closing_also_fails(self):
+        fake = self.use(FakeAspen(open_error=OSError("bad file"), close_error=OSError("COM server busy")))
+        with self.assertRaisesRegex(OSError, "bad file"): AB.AspenComTree("model.apw")
+        self.assertEqual(fake.steps(), ["CoInitialize", "open", "Close", "CoUninitialize"])
+
+
+class FakeProcess:
+    """A process object that only records what is done to it. `broken_pipe` names a pipe whose close() raises."""
+    def __init__(self, broken_pipe=None):
+        self.pid, self.log = -1, []
+
+        def pipe(name):
+            def close():
+                self.log.append(name + ".close")
+                if name == broken_pipe: raise BrokenPipeError("the other end has gone")
+            return types.SimpleNamespace(close=close)
+        self.stdin, self.stdout = pipe("stdin"), pipe("stdout")
+
+    def terminate(self): self.log.append("terminate")
+    def kill(self): self.log.append("kill")
+    def wait(self, timeout=None): self.log.append("wait")
+
+
+def transport_around(process):
+    """A StdioTransport holding `process`, without starting anything."""
+    t = StdioTransport.__new__(StdioTransport)
+    t.p, t.broken = process, None
+    return t
+
+
+class StoppingWithoutProcessGroups(unittest.TestCase):
+    """Windows has no process groups. Simulated here: this is not a run on Windows."""
+    def test_it_asks_the_process_to_end_and_then_kills_it(self):
+        backend = DT_backend()
+        p = FakeProcess()
+        group_kill = mock.Mock()
+        # `signal` is emptied: Windows has no SIGKILL constant, so this path must not look one up
+        with mock.patch.object(backend, "signal", types.SimpleNamespace()), \
+             mock.patch.object(backend.os, "killpg", group_kill, create=True), \
+             mock.patch.object(backend.os, "name", "nt"):
+            transport_around(p)._stop("stopped")
+        self.assertEqual(p.log, ["terminate", "wait", "kill", "wait", "stdin.close", "stdout.close"])
+        group_kill.assert_not_called()
+
+
+class BrokenPipesDuringCleanup(unittest.TestCase):
+    """No real process: the group signal is replaced so that nothing on this machine is signalled."""
+    def run_with(self, broken_pipe, action):
+        backend = DT_backend()
+        p = FakeProcess(broken_pipe)
+        t = transport_around(p)
+        with mock.patch.object(backend.StdioTransport, "_signal", lambda self, name: p.log.append(name)):
+            action(t)                                                    # must not raise
+        return p.log
+
+    def test_stopping_carries_on_to_the_second_pipe_when_the_first_fails_to_close(self):
+        log = self.run_with("stdin", lambda t: t._stop("stopped"))
+        self.assertEqual(log, ["SIGTERM", "wait", "SIGKILL", "wait", "stdin.close", "stdout.close"])
+
+    def test_close_finishes_when_the_server_has_already_dropped_its_input(self):
+        log = self.run_with("stdin", lambda t: t.close())
+        self.assertEqual(log, ["stdin.close", "wait", "SIGKILL", "stdout.close"])
+
 
 class Recorder:
     def __init__(self, error=None): self.closed, self.error = 0, error
